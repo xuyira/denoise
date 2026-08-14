@@ -1,0 +1,811 @@
+<!DOCTYPE html>
+<html>
+
+<script type="text/javascript" charset="utf-8" src="https://ajax.googleapis.com/ajax/libs/jquery/1.3.2/jquery.min.js"></script>
+<script id="MathJax-script" async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+
+<style type="text/css">
+body {
+    font-family: "Titillium Web", "HelveticaNeue-Light", "Helvetica Neue Light", "Helvetica Neue", Helvetica, Arial, "Lucida Grande", sans-serif;
+    font-weight: 300;
+    font-size: 18px;
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 20px;
+    padding-right: 20px;
+    max-width: 1000px;
+    width: 70%;
+}
+
+h1 {
+    font-weight: 300;
+    line-height: 1.15em;
+    text-align: center;
+    font-size: 42px;
+    font-weight: 500;
+}
+
+h2 {
+    font-size: 1.65em;
+    font-weight: 400;
+    margin: 24px 0px 8px 0px;
+    text-align: left;
+}
+
+h3 {
+    font-size: 1.2em;
+    font-weight: 600;
+    margin: 24px 0px 8px 0px;
+    text-align: left;
+}
+
+a:link, a:visited {
+    color: #1E40AF;
+    text-decoration: none;
+}
+a:hover {
+    color: #2563EB;
+}
+
+.paper-title {
+    padding: 1px 0px 1px 0px;
+}
+
+section {
+    margin: 40px 0px 40px 0px;
+    text-align: justify;
+    clear: both;
+}
+
+.author-row-new {
+    text-align: center;
+}
+
+.author-row-new a {
+    display: inline-block;
+    font-size: 22px;
+    padding: 5px;
+    color: #000;
+    text-decoration: none;
+}
+
+.author-row-new sup {
+    color: #313436;
+    font-size: 12px;
+}
+
+.affiliations-new {
+    font-size: 18px;
+    text-align: center;
+    width: 100%;
+    margin: 0 auto;
+    margin-bottom: 24px;
+}
+
+.affil-row {
+    margin-top: 20px;
+}
+
+.venue {
+    font-size: 22px;
+}
+
+.text-center {
+    text-align: center;
+}
+
+hr {
+    height: 1px;
+    border: 0;
+    border-top: 1px solid #ddd;
+    margin: 0;
+}
+
+p {
+    line-height: 1.5em;
+}
+
+.caption {
+    font-size: inherit;
+    color: inherit;
+    margin-top: 12px;
+    margin-bottom: 20px;
+    line-height: 1.5em;
+    text-align: left;
+}
+
+figure {
+    display: block;
+    margin: auto;
+    margin-top: 10px;
+    margin-bottom: 10px;
+}
+
+.figure img {
+    width: 100%;
+}
+
+#bibtex pre {
+    font-size: 14px;
+    background-color: #eee;
+    padding: 24px;
+}
+
+pre {
+    font-size: 0.9em;
+    padding-left: 7px;
+    padding-right: 7px;
+    padding-top: 3px;
+    padding-bottom: 3px;
+    border-radius: 3px;
+    background-color: rgb(235, 235, 235);
+    overflow-x: auto;
+}
+
+.paper-btn-parent {
+    display: flex;
+    justify-content: center;
+    margin: 28px 0px;
+    gap: 40px;
+    font-size: 22px;
+}
+
+.paper-btn, .github-btn {
+    transition: all 0.2s;
+}
+
+.paper-btn:hover, .github-btn:hover {
+    color: #2563EB;
+    transform: translateY(-2px);
+}
+
+.container {
+    margin-left: auto;
+    margin-right: auto;
+    padding-left: 0px;
+    padding-right: 0px;
+}
+
+/* Image grid layouts */
+.image-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+}
+
+.image-grid img {
+    width: 100%;
+}
+
+.image-grid-three {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 10px;
+    width: 90%;
+    justify-items: center;
+    margin: 0 auto;
+}
+
+.image-grid-three img {
+    width: 100%;
+}
+
+.image-grid-tab {
+    text-align: center;
+    justify-content: center;
+    display: grid;
+    place-items: center;
+    grid-template-columns: 1fr 1.22fr;
+    gap: 10px;
+    width: 90%;
+    justify-items: center;
+    margin: 0 auto;
+}
+
+.image-grid-tab img {
+    width: 100%;
+}
+
+/* News items */
+.news-item {
+    padding: 3px 0;
+    font-size: 18px;
+}
+
+/* Highlight box */
+.highlight-box {
+    background-color: #EDF2FB;
+    border-left: 4px solid #1E40AF;
+    padding: 24px 30px;
+    border-radius: 0 6px 6px 0;
+    margin: 24px 0;
+    font-size: 17px;
+    line-height: 1.6;
+}
+
+.highlight-box h4 {
+    color: #1E40AF;
+    margin-bottom: 8px;
+    margin-top: 18px;
+    font-size: 18px;
+}
+
+.highlight-box h4:first-child {
+    margin-top: 0;
+}
+
+/* Key points grid */
+.key-points {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin: 16px 0;
+}
+
+.key-point {
+    background-color: #EDF2FB;
+    border-radius: 8px;
+    padding: 16px 18px;
+    border: 1px solid #bfdbfe;
+}
+
+.key-point .icon {
+    font-size: 1.2rem;
+    margin-bottom: 4px;
+}
+
+.key-point h4 {
+    font-size: 18px;
+    font-weight: 600;
+    margin-bottom: 8px;
+}
+
+.key-point p {
+    font-size: 16px;
+    color: #666;
+    margin-bottom: 0;
+    line-height: 1.5em;
+}
+
+/* Results table */
+.table-wrap {
+    overflow-x: auto;
+    margin: 16px 0;
+}
+
+table.results {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 16px;
+}
+
+table.results th,
+table.results td {
+    padding: 8px 10px;
+    text-align: center;
+    border-bottom: 1px solid #ddd;
+}
+
+table.results thead th {
+    background: #EDF2FB;
+    font-weight: 600;
+    border-bottom: 2px solid #1E40AF;
+}
+
+table.results .method-cell {
+    text-align: left;
+}
+
+table.results .model-cell {
+    font-weight: 600;
+    text-align: left;
+    vertical-align: middle;
+}
+
+table.results tr.ours {
+    background: #dbeafe;
+    font-weight: 600;
+}
+
+table.results .best {
+    color: #1E40AF;
+    font-weight: 700;
+}
+
+blockquote {
+    background-color: #EDF2FB;
+    padding: 20px 26px;
+    margin: 16px 0;
+    border-radius: 6px;
+    border-left: 4px solid #1E40AF;
+    font-size: 18px;
+    line-height: 1.5em;
+}
+
+* {
+    box-sizing: border-box;
+}
+
+/* Overview (REPA-style scan-friendly block) */
+#overview .overview-lead {
+    margin: 0 0 12px 0;
+    line-height: 1.55;
+}
+
+#overview blockquote {
+    margin: 18px 0;
+}
+
+#overview blockquote.overview-thesis {
+    font-size: 1.06em;
+    line-height: 1.55;
+}
+
+#overview .overview-points {
+    margin: 16px 0 8px 0;
+    padding-left: 1.35em;
+    line-height: 1.55;
+    text-align: left;
+}
+
+#overview .overview-points li {
+    margin: 8px 0;
+}
+
+#overview .overview-points li:first-child {
+    margin-top: 4px;
+}
+
+/* Side-by-side figure + text rows; flip orientation with .fig-right */
+.fig-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 30px;
+    align-items: center;
+    margin: 32px 0;
+}
+.fig-row.fig-right .fig-col {
+    order: 2;
+}
+.fig-row .fig-col img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+.fig-row .text-col h3 {
+    margin-top: 0;
+}
+.fig-row .text-col p {
+    margin: 8px 0;
+    line-height: 1.55;
+}
+@media (max-width: 760px) {
+    .fig-row { grid-template-columns: 1fr; gap: 16px; }
+    .fig-row.fig-right .fig-col { order: 0; }
+}
+
+/* Compact variant: smaller image, longer prose; lets the text column drive row height */
+.fig-compact {
+    display: grid;
+    grid-template-columns: 38fr 62fr;
+    gap: 26px;
+    align-items: center;
+    margin: 28px 0;
+}
+.fig-compact.fig-right .fig-col {
+    order: 2;
+}
+.fig-compact .fig-col img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+.fig-compact .text-col h3 {
+    margin-top: 0;
+}
+.fig-compact .text-col p {
+    margin: 6px 0;
+    line-height: 1.55;
+    font-size: 17px;
+}
+/* Tighter variant: figure column sized to the image, text fills the rest */
+.fig-compact.fig-tight {
+    grid-template-columns: 1fr 240px;
+}
+.fig-compact.fig-tight .fig-col img {
+    width: 100%;
+}
+/* 60/40 variant: prose-heavy text column with a larger companion figure */
+.fig-compact.fig-6040 {
+    grid-template-columns: 60fr 40fr;
+    align-items: center;
+}
+.fig-compact.fig-6040 .fig-col img {
+    width: 100%;
+}
+@media (max-width: 760px) {
+    .fig-compact { grid-template-columns: 1fr; gap: 16px; }
+    .fig-compact.fig-right .fig-col { order: 0; }
+}
+
+/* Hero figure (pipeline) just under the buttons */
+.hero-figure {
+    margin: 12px 0 8px 0;
+}
+.hero-figure img {
+    width: 100%;
+    height: auto;
+    display: block;
+}
+.hero-caption {
+    text-align: center;
+    margin: 8px 0 16px 0;
+    line-height: 1.5em;
+}
+
+.analysis-q {
+    font-size: 1.15em;
+    font-weight: 600;
+    color: #1E40AF;
+    margin: 28px 0 6px 0;
+}
+</style>
+
+<link href='https://fonts.googleapis.com/css?family=Titillium+Web:400,600,400italic,600italic,300,300italic' rel='stylesheet' type='text/css'>
+
+<head>
+    <meta charset="UTF-8">
+    <title>Let EEG Models Learn EEG</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta property="og:description" content="Let EEG Models Learn EEG — JET, a conditional flow-matching framework for high-fidelity EEG generation."/>
+    <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:title" content="Let EEG Models Learn EEG">
+</head>
+
+<body>
+<div class="container">
+
+    <!-- ============================================================ -->
+    <!-- TITLE & AUTHORS                                              -->
+    <!-- ============================================================ -->
+    <div class="paper-title">
+        <h1>
+            <font color="#1E40AF">Let EEG Models Learn EEG</font>
+        </h1>
+    </div>
+
+    <div id="authors">
+        <center>
+            <div class="author-row-new">
+                <!-- <a>Yifan Wang<sup>1</sup></a>, -->
+                <a href="https://yfwang.me/" target="_blank" rel="noopener noreferrer">Yifan Wang<sup>1</sup></a>
+                <a>Yijia Ma<sup>2</sup></a>,
+                <a href="https://med.uth.edu/psychiatry/2023/12/19/wen-li-phd/" target="_blank" rel="noopener noreferrer">Wen Li<sup>2</sup></a>
+                <a href="https://chenyuyou.me/" target="_blank" rel="noopener noreferrer">Chenyu You<sup>1</sup></a>
+            </div>
+        </center>
+        <center>
+            <div class="affiliations-new">
+                <span><sup>1</sup>Stony Brook University</span>&nbsp;&nbsp;&nbsp;
+                <span><sup>2</sup>University of Texas Health Center at Houston</span>
+            </div>
+        </center>
+
+        <div style="clear: both">
+            <div class="paper-btn-parent">
+                <a class="paper-btn" href="https://arxiv.org/abs/2605.21280">
+                    <span class="ai ai-arxiv"></span>
+                    Paper
+                </a>
+                <a class="github-btn" href="https://github.com/Y-Research-SBU/JET">
+                    <span class="fab fa-github"></span>
+                    Code
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- HERO: JET PIPELINE FIGURE                                    -->
+    <!-- ============================================================ -->
+    <div class="hero-figure">
+        <img src="figures/main.svg" alt="JET pipeline">
+    </div>
+    <p class="hero-caption">
+        <b>JET pipeline.</b> Multi-channel EEG is generated by learning a continuous vector field
+        <em>v</em>(<em>x<sub>t</sub></em>, <em>t</em>) via flow matching, conditioned on pathological states and
+        regularized by structure-preserving constraints on spectral, temporal, and statistical properties.
+    </p>
+
+    <!-- ============================================================ -->
+    <!-- NEWS                                                         -->
+    <!-- ============================================================ -->
+    <section id="news">
+        <h2>News</h2>
+        <hr>
+        <div class="row">
+            <div class="news-item"><span class="material-icons"> event </span> [May 2026] Code and project page released.</div>
+            <div class="news-item"><span class="material-icons"> event </span> [April 2026] JET accepted at ICML 2026.</div>
+        </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- OVERVIEW                                                     -->
+    <!-- ============================================================ -->
+    <section id="overview">
+        <h2>Overview</h2>
+        <hr>
+        <p class="overview-lead">
+            High-fidelity EEG generation is critical for alleviating data scarcity and addressing privacy constraints in large-scale neural modeling.
+        </p>
+        <blockquote class="overview-thesis">
+            Despite recent progress, most existing approaches formulate EEG generation via <em>discrete</em>
+            denoising objectives, which inadequately reflect the inherently <em>continuous</em> temporal
+            dynamics and spectral structure of neural activity.
+        </blockquote>
+        <p class="overview-lead">
+            <b>JET</b> is a generative framework based on conditional flow matching that models EEG as raw sequences evolving along
+            continuous trajectories.
+        </p>
+        <ul class="overview-points">
+            <li><b>Continuous formulation.</b> Learn a smooth vector field that transports noise to the EEG data distribution without discretized denoising or domain-specific representations.</li>
+            <li><b>Principled constraints.</b> Spectral, temporal-stationarity, and signal-statistics losses keep the learned dynamics consistent with EEG.</li>
+            <li><b>State of the art.</b> Reduces <b>TS-FID by over 40%</b> vs. strong baselines on three large-scale benchmarks.</li>
+        </ul>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- METHOD OVERVIEW                                              -->
+    <!-- ============================================================ -->
+    <section>
+        <h2>Method</h2>
+        <hr>
+
+        <h3>Architecture</h3>
+        <div class="figure">
+            <img src="figures/structure.svg" alt="JET architecture">
+        </div>
+        <p>
+            <b>Just EEG Transformer (JET).</b> JET models multi-channel EEG directly as raw continuous sequences,
+            avoiding handcrafted feature extraction such as time frequency transforms or predefined adjacency
+            matrices. Each EEG segment is split into non-overlapping temporal patches along the time axis. Every
+            patch is linearly projected into an embedding while preserving channel identity, and learnable
+            positional embeddings encode temporal order. The resulting token sequence is processed by a stack of
+            standard Transformer blocks with multi-head self-attention and feed-forward layers. Conditioning
+            information, including diffusion time and class label, is injected via adaptive layer normalization,
+            whose scale and shift parameters are predicted from the sum of the time embedding and the class
+            embedding. To handle the severe class imbalance of clinical EEG, JET also uses an adaptive
+            class-balanced sampler that assigns each training sample a probability inversely proportional to its
+            class count, encouraging robust representations of under-represented pathological patterns.
+        </p>
+
+        <div class="fig-compact fig-right fig-6040">
+            <div class="fig-col">
+                <img src="figures/toy_3x4.svg" alt="GAN vs. Diffusion vs. Flow Matching toy comparison">
+            </div>
+            <div class="text-col">
+                <h3>Why flow matching for EEG?</h3>
+                <p>
+                    <b>GANs</b> map latent noise directly to data space, which makes training unstable and
+                    prone to mode collapse; <b>diffusion models</b> rely on stochastic denoising dynamics that
+                    discretize generation into many steps. <b>Flow matching</b> instead learns a smooth,
+                    time-dependent vector field whose integral curves realize optimal transport from a
+                    dispersed source to the target distribution.
+                </p>
+                <p>
+                    Brain activity is non-stationary, evolving smoothly through a high-dimensional state space.
+                    We therefore argue that effective EEG generation requires modeling neural activity as a
+                    <b>continuous dynamical process</b> that operates directly on the continuous evolution of
+                    neural signals, rather than as a sequence of discrete denoising steps.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- RESULTS                                                      -->
+    <!-- ============================================================ -->
+    <section>
+        <h2>Results</h2>
+        <hr>
+
+        <h3>Quantitative Comparison</h3>
+        <p>
+            JET consistently outperforms EEG-GAN and Vanilla Diffusion across three large-scale benchmarks
+            (TUAB, TUEV, TUSZ) on generation quality (TS-FID), conditional consistency (Sil.), and downstream utility (&Delta; Acc).
+        </p>
+
+        <div class="table-wrap">
+            <table class="results">
+                <thead>
+                    <tr>
+                        <th rowspan="2">Method</th>
+                        <th colspan="3" style="border-bottom:1px solid #ddd;">TUAB</th>
+                        <th colspan="3" style="border-bottom:1px solid #ddd;">TUEV</th>
+                        <th colspan="3" style="border-bottom:1px solid #ddd;">TUSZ</th>
+                    </tr>
+                    <tr>
+                        <th>TS-FID↓</th><th>Sil.↑</th><th>&Delta; Acc↑</th>
+                        <th>TS-FID↓</th><th>Sil.↑</th><th>&Delta; Acc↑</th>
+                        <th>TS-FID↓</th><th>Sil.↑</th><th>&Delta; Acc↑</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td class="method-cell">EEG-GAN</td>
+                        <td>324.18</td><td>0.786</td><td>+0.000</td>
+                        <td>448.65</td><td>0.667</td><td>&minus;0.004</td>
+                        <td>274.37</td><td>0.891</td><td>+0.001</td>
+                    </tr>
+                    <tr>
+                        <td class="method-cell">Vanilla Diffusion</td>
+                        <td>342.91</td><td>0.710</td><td>&minus;0.002</td>
+                        <td>415.82</td><td>0.703</td><td>+0.000</td>
+                        <td>300.47</td><td>0.746</td><td>+0.000</td>
+                    </tr>
+                    <tr class="ours">
+                        <td class="method-cell">JET (Ours)</td>
+                        <td class="best">188.27</td><td class="best">0.995</td><td class="best">+0.029</td>
+                        <td class="best">235.86</td><td class="best">0.983</td><td class="best">+0.032</td>
+                        <td class="best">151.27</td><td class="best">0.987</td><td class="best">+0.017</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <h3>Generated Samples</h3>
+        <p>
+            Qualitative visualization of EEG segments generated by JET on TUEV, shown for each of the six
+            event classes. For every class we display the generated sample whose multi-channel waveform best
+            matches its corresponding ground-truth recording. Each animation sweeps through a 5&nbsp;second,
+            16-channel bipolar montage, illustrating that JET reproduces class-characteristic morphology
+            &mdash; from sharp spike-and-slow-wave complexes to high-amplitude eye-movement and artifact
+            transients.
+        </p>
+        <div class="image-grid-three">
+            <img src="figures/eeg_spsw.gif" alt="Generated EEG — Spike & Slow Wave">
+            <img src="figures/eeg_gped.gif" alt="Generated EEG — Generalized Periodic Discharge">
+            <img src="figures/eeg_pled.gif" alt="Generated EEG — Periodic Lateralized Discharge">
+            <img src="figures/eeg_eyem.gif" alt="Generated EEG — Eye Movement">
+            <img src="figures/eeg_artf.gif" alt="Generated EEG — Artifact">
+            <img src="figures/eeg_bckg.gif" alt="Generated EEG — Background">
+        </div>
+
+        <h3>Physiological Analysis</h3>
+        <p>
+            To go beyond aggregate metrics and assess whether JET preserves key physiological structure, we conduct
+            a fine-grained analysis along three fundamental dimensions: spectral structure, temporal dynamics, and
+            statistical distributions. Together, these analyses examine whether the proposed constraints
+            effectively address the limitations observed in prior generative paradigms.
+        </p>
+
+        <div class="analysis-q">▷ Can JET Overcome Spectral Bias under Power-Law Scaling?</div>
+        <p>
+            We first examine whether JET preserves the power-law spectral structure (1/<em>f</em>^χ) and
+            low-energy high-frequency components of EEG signals. Conventional objectives often suppress these
+            components due to spectral bias, leading to oversmoothed generations. The figure compares the
+            power spectral density (PSD) of generated and real signals, revealing strong alignment across
+            frequency bands.
+        </p>
+        <div class="fig-compact">
+            <div class="fig-col">
+                <img src="figures/power_spectral_density.svg" alt="Power spectral density">
+            </div>
+            <div class="text-col">
+                <p>
+                    (1) <b>Low-Frequency Precision (δ-band).</b> In the 0 to 5 Hz range, which contains
+                    high-amplitude pathological slow waves and fundamental background rhythms, the generated
+                    spectra closely follow the ground truth across all datasets.
+                </p>
+                <p>
+                    (2) <b>Structural Preservation in Mid-Frequencies.</b> In the α-band (8 to 13 Hz),
+                    especially in TUAB and TUEV, JET reproduces distinct α-band peaks rather than collapsing
+                    to a smooth 1/<em>f</em> profile, demonstrating that the model captures structured
+                    oscillatory activity beyond global spectral trends.
+                </p>
+                <p>
+                    (3) <b>High-Frequency Selectivity.</b> For frequencies above 15 Hz (β/γ bands),
+                    generated spectra exhibit mild attenuation relative to the ground truth, reflecting
+                    selective suppression of unstructured high-frequency components while retaining coherent
+                    neural activity.
+                </p>
+            </div>
+        </div>
+
+        <div class="analysis-q">▷ Can JET Model Non-Stationary Temporal Dynamics?</div>
+        <p>
+            We examine whether JET captures non-stationary temporal dynamics while avoiding pathological
+            drift over long sequences. The figure shows the temporal evolution of signal envelopes,
+            indicating that the generated signals maintain stable amplitude statistics over time without
+            baseline drift or variance explosion.
+        </p>
+        <div class="fig-compact fig-right">
+            <div class="fig-col">
+                <img src="figures/temporal_stationarity.svg" alt="Temporal stationarity">
+            </div>
+            <div class="text-col">
+                <p>
+                    (1) <b>Baseline Stability.</b> The median of the generated signals remains centered
+                    around the real signals throughout the entire time course across all datasets,
+                    indicating that the model successfully prevents baseline drift.
+                </p>
+                <p>
+                    (2) <b>Consistent Variance Structure.</b> The inter-percentile bands remain aligned with
+                    the real bands within the window; unlike baselines that suffer from error accumulation,
+                    the flow-based approach preserves the signal's energy profile consistently over time.
+                </p>
+                <p>
+                    (3) <b>Envelope Alignment.</b> The generated variance envelope closely tracks the ground
+                    truth. Notably in TUEV, where the real data exhibits bursty high-amplitude transients,
+                    the generated distribution's outer quantiles effectively cover these regions.
+                </p>
+            </div>
+        </div>
+
+        <div class="analysis-q">▷ Can JET Align Heavy-Tailed Distributions?</div>
+        <p>
+            Finally, we investigate the alignment with the heavy-tailed, non-Gaussian distributions typical of
+            pathological populations, ensuring the model avoids mode collapse. We analyze marginal amplitude
+            density and population-level spectral stability.
+        </p>
+
+        <div class="fig-compact">
+            <div class="fig-col">
+                <img src="figures/amplitude_distribution.svg" alt="Amplitude distribution">
+            </div>
+            <div class="text-col">
+                <p>
+                    (1) <b>Heavy-Tail Reconstruction.</b> Within the valid signal window, the generated
+                    log-density exhibits strong alignment with the ground truth. The model accurately
+                    reproduces both the sharp central peak and the heavy-tailed decay of the amplitude
+                    distribution, demonstrating accurate modeling of EEG signal statistics without being
+                    dominated by sparse outlier noise.
+                </p>
+            </div>
+        </div>
+
+        <div class="fig-compact fig-right">
+            <div class="fig-col">
+                <img src="figures/spectral_distribution.svg" alt="Spectral distribution">
+            </div>
+            <div class="text-col">
+                <p>
+                    (2) <b>Avoidance of Mode Collapse.</b> The substantial overlap between the generated and
+                    real confidence intervals confirms that the model avoids mode collapse. The generated
+                    samples exhibit a wide dispersion in spectral power, mirroring the inter-subject and
+                    inter-state variability found in the ground truth, rather than converging to a single
+                    deterministic profile.
+                </p>
+                <p>
+                    (3) <b>Frequency-Dependent Stochasticity.</b> The model correctly learns the natural
+                    stochasticity of slow-wave activities (below 5 Hz), matching the real confidence
+                    intervals with high precision. Conversely, in higher frequencies, the generated
+                    distribution exhibits a slightly narrower spread, reflecting a conservative constraint
+                    that prioritizes robust neural features over sporadic, high-variance artifacts or noisy
+                    recording conditions.
+                </p>
+            </div>
+        </div>
+    </section>
+
+    <!-- ============================================================ -->
+    <!-- CITATION                                                     -->
+    <!-- ============================================================ -->
+    <section id="bibtex">
+        <h2>Citation</h2>
+        <hr>
+        <pre><code>@article{wang2026let,
+  title   = {Let EEG Models Learn EEG},
+  author  = {Wang, Yifan and Ma, Yijia and Li, Wen and You, Chenyu},
+  journal = {ICML},
+  year    = {2026}
+}</code></pre>
+    </section>
+
+</div>
+</body>
+</html>
