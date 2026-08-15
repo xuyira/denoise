@@ -39,10 +39,10 @@ def get_args_parser():
                         help="Length of each EEG segment; defaults to the dataset's recommended value.")
     parser.add_argument("--noise_types", nargs="+", default=["eog", "emg"], choices=["eog", "emg"],
                         help="EEGdenoiseNet artifact types used to synthesize noisy EEG.")
-    parser.add_argument("--train_snr_min", type=float, default=-5.0)
-    parser.add_argument("--train_snr_max", type=float, default=5.0)
+    parser.add_argument("--train_snr_min", type=float, default=-7.0)
+    parser.add_argument("--train_snr_max", type=float, default=2.0)
     parser.add_argument("--eval_snr_levels", nargs="+", type=float,
-                        default=[-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5])
+                        default=[-7, -6, -5, -4, -3, -2, -1, 0, 1, 2])
     parser.add_argument("--combin_num", type=int, default=10,
                         help="Synthetic combinations per clean EEG epoch for EEGdenoiseNet training.")
 

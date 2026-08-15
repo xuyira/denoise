@@ -26,7 +26,7 @@ The dataset loader synthesizes noisy EEG online:
 noisy = clean + scaled_artifact
 ```
 
-The artifact scale is chosen by SNR. Training samples draw SNR uniformly from `[-5, 5]` dB. Validation and test samples use fixed SNR levels from `-5` to `5` dB.
+The artifact scale is chosen by SNR. Training samples draw SNR uniformly from `[-7, 2]` dB. Validation and test samples use fixed SNR levels from `-7` to `2` dB.
 
 Expected layout:
 

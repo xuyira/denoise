@@ -16,4 +16,4 @@ python inference.py \
   --eeg_patch_size 64 \
   --gen_bsz 64 \
   --num_sampling_steps 50 \
-  --sampling_method heun
+  --sampling_method heun 
