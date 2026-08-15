@@ -60,8 +60,10 @@ def get_args_parser():
     parser.add_argument("--filter_highcut", type=float, default=45.0)
     parser.add_argument("--filter_order", type=int, default=4)
     parser.add_argument("--filter_notch", type=float, default=60.0)
-    parser.add_argument("--gan_l1_weight", type=float, default=10.0)
-    parser.add_argument("--gan_adv_weight", type=float, default=1.0)
+    parser.add_argument("--gan_lr", type=float, default=1e-3)
+    parser.add_argument("--gan_recon_weight", type=float, default=1.0)
+    parser.add_argument("--gan_adv_weight", type=float, default=5e-4)
+    parser.add_argument("--gan_l1_weight", type=float, default=0.0)
     parser.add_argument("--num_workers", type=int, default=4)
     parser.add_argument("--pin_mem", action="store_true", default=True)
     return parser
@@ -230,8 +232,9 @@ def _train_regression_model(args, model, train_loader, val_loader, device, run_d
 
 
 def _train_gan_model(args, generator, discriminator, train_loader, val_loader, device, run_dir):
-    g_opt = torch.optim.Adam(generator.parameters(), lr=args.lr, betas=(0.5, 0.999))
-    d_opt = torch.optim.Adam(discriminator.parameters(), lr=args.lr, betas=(0.5, 0.999))
+    g_opt = torch.optim.Adam(generator.parameters(), lr=args.gan_lr, betas=(0.9, 0.999), eps=1e-8)
+    d_opt = torch.optim.Adam(discriminator.parameters(), lr=args.gan_lr, betas=(0.9, 0.999), eps=1e-8)
+    mse = nn.MSELoss()
     l1 = nn.L1Loss()
     best_loss = float("inf")
     best_path = run_dir / "checkpoint-best.pth"
@@ -259,7 +262,10 @@ def _train_gan_model(args, generator, discriminator, train_loader, val_loader, d
             fake_logits = discriminator(fake)
             real_logits = discriminator(clean)
             g_adv_loss, _ = gan_losses(real_logits.detach(), fake_logits)
-            g_loss = args.gan_adv_weight * g_adv_loss + args.gan_l1_weight * l1(fake, clean)
+            recon_loss = mse(fake, clean)
+            if args.gan_l1_weight > 0:
+                recon_loss = recon_loss + args.gan_l1_weight * l1(fake, clean)
+            g_loss = args.gan_recon_weight * recon_loss + args.gan_adv_weight * g_adv_loss
             g_opt.zero_grad(set_to_none=True)
             g_loss.backward()
             g_opt.step()
