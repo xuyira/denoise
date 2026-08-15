@@ -23,15 +23,11 @@ from data.eegdenoisenet_metrics import (
 from models.eegdenoise_baselines import build_baseline_model
 from models.eegdenoisenet_extra import (
     build_gan_models,
-    build_transformer_denoiser,
-    emd_denoise_batch,
-    filter_denoise_batch,
     gan_losses,
 )
 
 
-CLASSICAL_METHODS = {"filter", "emd"}
-TRAINABLE_METHODS = {"fcnn", "simple_cnn", "complex_cnn", "rnn_lstm", "transformer", "gan"}
+TRAINABLE_METHODS = {"fcnn", "simple_cnn", "complex_cnn", "rnn_lstm", "gan"}
 
 
 def get_args_parser():
@@ -40,7 +36,7 @@ def get_args_parser():
     parser.add_argument("--output_dir", default="./output/eegdenoise_baselines")
     parser.add_argument(
         "--model",
-        choices=["fcnn", "simple_cnn", "complex_cnn", "rnn_lstm", "transformer", "gan", "filter", "emd"],
+        choices=sorted(TRAINABLE_METHODS),
         required=True,
     )
     parser.add_argument("--noise_types", nargs="+", default=["eog"], choices=["eog", "emg"])
@@ -56,10 +52,6 @@ def get_args_parser():
     parser.add_argument("--device", default="cuda")
     parser.add_argument("--sampling_rate", type=float, default=256.0)
     parser.add_argument("--spectral_max_freq", type=float, default=120.0)
-    parser.add_argument("--filter_lowcut", type=float, default=0.5)
-    parser.add_argument("--filter_highcut", type=float, default=45.0)
-    parser.add_argument("--filter_order", type=int, default=4)
-    parser.add_argument("--filter_notch", type=float, default=60.0)
     parser.add_argument("--gan_lr", type=float, default=1e-3)
     parser.add_argument("--gan_recon_weight", type=float, default=1.0)
     parser.add_argument("--gan_adv_weight", type=float, default=5e-4)
@@ -115,39 +107,6 @@ def _evaluate_mse(model, loader, device):
     return total / max(1, count)
 
 
-def _predict_batch(args, model_name, model, noisy, metadata):
-    if model_name == "filter":
-        return filter_denoise_batch(
-            noisy,
-            sampling_rate=args.sampling_rate,
-            lowcut=args.filter_lowcut,
-            highcut=args.filter_highcut,
-            order=args.filter_order,
-            notch_freq=args.filter_notch,
-        )
-    if model_name == "emd":
-        return emd_denoise_batch(noisy, noise_type=metadata["noise_type"])
-    return model(noisy)
-
-
-def _evaluate_method(args, model_name, model, loader, device):
-    if model_name in CLASSICAL_METHODS:
-        model.eval() if hasattr(model, "eval") else None
-    else:
-        model.eval()
-    total = 0.0
-    count = 0
-    criterion = nn.MSELoss(reduction="sum")
-    with torch.no_grad():
-        for noisy, clean, metadata in loader:
-            noisy = noisy.to(device).float()
-            clean = clean.to(device).float()
-            pred = _predict_batch(args, model_name, model, noisy, metadata)
-            total += float(criterion(pred, clean).item())
-            count += int(clean.numel())
-    return total / max(1, count)
-
-
 def _evaluate_no_train(args, model_name, model, loader, device):
     metrics = new_metric_store()
     per_snr = {}
@@ -158,7 +117,7 @@ def _evaluate_no_train(args, model_name, model, loader, device):
         for noisy, clean, metadata in loader:
             noisy = noisy.to(device).float()
             clean = clean.to(device).float()
-            pred = _predict_batch(args, model_name, model, noisy, metadata)
+            pred = model(noisy)
 
             noisy_s = to_signal(noisy).cpu()
             clean_s = to_signal(clean).cpu()
@@ -352,14 +311,7 @@ def main(args):
 
     best_path = None
     last_path = None
-    if args.model in CLASSICAL_METHODS:
-        model = None
-        print(f"Evaluating deterministic baseline '{args.model}' without training.")
-    elif args.model == "transformer":
-        model = build_transformer_denoiser(args.target_length).to(device)
-        model, best_path, last_path = _train_regression_model(args, model, train_loader, val_loader, device, run_dir)
-        model.eval()
-    elif args.model == "gan":
+    if args.model == "gan":
         generator, discriminator = build_gan_models()
         generator = generator.to(device)
         discriminator = discriminator.to(device)

@@ -4,7 +4,7 @@ set -euo pipefail
 DATASETS_DIR="${1:-../EEGdenoiseNet/data}"
 OUTPUT_DIR="${2:-./output/eegdenoise_baselines}"
 
-MODELS=(fcnn simple_cnn complex_cnn rnn_lstm transformer gan filter emd)
+MODELS=(fcnn simple_cnn complex_cnn rnn_lstm gan)
 NOISE_TYPES=(eog emg)
 
 for noise_type in "${NOISE_TYPES[@]}"; do
