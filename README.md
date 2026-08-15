@@ -26,7 +26,7 @@ The dataset loader synthesizes noisy EEG online:
 noisy = clean + scaled_artifact
 ```
 
-The artifact scale is chosen by SNR. Training samples draw SNR uniformly from `[-7, 2]` dB. Validation and test samples use fixed SNR levels from `-7` to `2` dB.
+The artifact scale is chosen by SNR. Training samples draw SNR uniformly from `[-5, 5]` dB. Validation and test samples use fixed SNR levels from `-5` to `5` dB.
 
 Expected layout:
 
@@ -67,7 +67,8 @@ python train_eeg.py \
   --eeg_patch_size 64 \
   --batch_size 128 \
   --epochs 200 \
-  --loss_type l2
+  --loss_type mix \
+  --loss_weight_recon 0.5
 ```
 
 Checkpoints are written under `--output_dir`:

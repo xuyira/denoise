@@ -39,10 +39,10 @@ def get_args_parser():
                         help="Length of each EEG segment; defaults to the dataset's recommended value.")
     parser.add_argument("--noise_types", nargs="+", default=["eog", "emg"], choices=["eog", "emg"],
                         help="EEGdenoiseNet artifact types used to synthesize noisy EEG.")
-    parser.add_argument("--train_snr_min", type=float, default=-7.0)
-    parser.add_argument("--train_snr_max", type=float, default=2.0)
+    parser.add_argument("--train_snr_min", type=float, default=-5.0)
+    parser.add_argument("--train_snr_max", type=float, default=5.0)
     parser.add_argument("--eval_snr_levels", nargs="+", type=float,
-                        default=[-7, -6, -5, -4, -3, -2, -1, 0, 1, 2])
+                        default=[-5, -4, -3, -2, -1, 0, 1, 2, 3, 4, 5])
     parser.add_argument("--combin_num", type=int, default=10,
                         help="Synthetic combinations per clean EEG epoch for EEGdenoiseNet training.")
 
@@ -60,6 +60,7 @@ def get_args_parser():
 
     # loss
     parser.add_argument("--loss_type", default="l2", choices=["l1", "l2", "mix"])
+    parser.add_argument("--loss_weight_recon", type=float, default=0.5)
     parser.add_argument("--loss_weight_stft", type=float, default=0.0)
     parser.add_argument("--loss_weight_stat", type=float, default=0.0)
     parser.add_argument("--loss_weight_tv", type=float, default=0.0)

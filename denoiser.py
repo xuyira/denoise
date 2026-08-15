@@ -23,6 +23,7 @@ class Denoiser(nn.Module):
         self.raw_vit_patch_num = args.eeg_patch_num
 
         self.loss_type = getattr(args, "loss_type", "l2")
+        self.loss_weight_recon = getattr(args, "loss_weight_recon", 0.5)
         self.loss_weight_stft = getattr(args, "loss_weight_stft", 0.2)
         self.loss_weight_stat = getattr(args, "loss_weight_stat", 1.0)
         self.loss_weight_tv = getattr(args, "loss_weight_tv", 0.05)
@@ -91,7 +92,7 @@ class Denoiser(nn.Module):
         loss_l1 = (x - x_pred).abs().mean()
 
         if self.loss_type == "mix":
-            mix_loss = ((v - v_pred) ** 2).mean() + loss_l1
+            mix_loss = ((v - v_pred) ** 2).mean() + self.loss_weight_recon * loss_l1
 
             if self.loss_weight_stft > 0:
                 fft_sizes = [64, 128, 256, 512, 1024]

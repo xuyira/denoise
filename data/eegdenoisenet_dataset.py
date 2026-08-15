@@ -35,8 +35,8 @@ class EEGDenoiseNetDataset(Dataset):
         data_dir,
         split: str = "train",
         noise_types: Sequence[str] = ("eog", "emg"),
-        train_snr_range=(-7.0, 2.0),
-        eval_snr_levels: Iterable[float] = tuple(range(-7, 3)),
+        train_snr_range=(-5.0, 5.0),
+        eval_snr_levels: Iterable[float] = tuple(range(-5, 6)),
         combin_num: int = 10,
         seed: int = 0,
         normalize: bool = True,
@@ -68,6 +68,7 @@ class EEGDenoiseNetDataset(Dataset):
                 raise ValueError(f"{filename} length {artifact.shape[1]} does not match EEG length {self.clean.shape[1]}.")
             self.artifacts[noise_type] = artifact
 
+        # 8:1:1 split over each source before mixing.
         self.clean_indices = _split_indices(len(self.clean), split, self.seed)
         self.artifact_indices = {
             noise_type: _split_indices(len(artifact), split, self.seed + 100 + i)

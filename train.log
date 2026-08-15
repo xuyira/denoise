@@ -1,0 +1,53 @@
+Validation stats: loss: 0.2506 (0.2036)
+log_dir: ./output/eegdenoisenet
+Epoch: [198]  [  0/282]  eta: 0:00:36  lr: 0.000025  loss: 0.0855 (0.0855)  time: 0.1291  data: 0.0883  max mem: 757
+Epoch: [198]  [ 20/282]  eta: 0:00:09  lr: 0.000025  loss: 0.0903 (0.0913)  time: 0.0323  data: 0.0001  max mem: 757
+Epoch: [198]  [ 40/282]  eta: 0:00:08  lr: 0.000025  loss: 0.0894 (0.0915)  time: 0.0321  data: 0.0001  max mem: 757
+Epoch: [198]  [ 60/282]  eta: 0:00:07  lr: 0.000025  loss: 0.0886 (0.0910)  time: 0.0319  data: 0.0001  max mem: 757
+Epoch: [198]  [ 80/282]  eta: 0:00:06  lr: 0.000025  loss: 0.0887 (0.0909)  time: 0.0317  data: 0.0001  max mem: 757
+Epoch: [198]  [100/282]  eta: 0:00:05  lr: 0.000025  loss: 0.0926 (0.0918)  time: 0.0316  data: 0.0001  max mem: 757
+Epoch: [198]  [120/282]  eta: 0:00:05  lr: 0.000025  loss: 0.0936 (0.0922)  time: 0.0320  data: 0.0001  max mem: 757
+Epoch: [198]  [140/282]  eta: 0:00:04  lr: 0.000025  loss: 0.0934 (0.0924)  time: 0.0324  data: 0.0001  max mem: 757
+Epoch: [198]  [160/282]  eta: 0:00:03  lr: 0.000025  loss: 0.0902 (0.0924)  time: 0.0321  data: 0.0001  max mem: 757
+Epoch: [198]  [180/282]  eta: 0:00:03  lr: 0.000025  loss: 0.1004 (0.0931)  time: 0.0318  data: 0.0001  max mem: 757
+Epoch: [198]  [200/282]  eta: 0:00:02  lr: 0.000025  loss: 0.0904 (0.0931)  time: 0.0320  data: 0.0001  max mem: 757
+Epoch: [198]  [220/282]  eta: 0:00:02  lr: 0.000025  loss: 0.0935 (0.0931)  time: 0.0321  data: 0.0001  max mem: 757
+Epoch: [198]  [240/282]  eta: 0:00:01  lr: 0.000025  loss: 0.0888 (0.0929)  time: 0.0316  data: 0.0001  max mem: 757
+Epoch: [198]  [260/282]  eta: 0:00:00  lr: 0.000025  loss: 0.0910 (0.0929)  time: 0.0320  data: 0.0001  max mem: 757
+Epoch: [198]  [280/282]  eta: 0:00:00  lr: 0.000025  loss: 0.0963 (0.0932)  time: 0.0315  data: 0.0002  max mem: 757
+Epoch: [198]  [281/282]  eta: 0:00:00  lr: 0.000025  loss: 0.0954 (0.0932)  time: 0.0317  data: 0.0002  max mem: 757
+Epoch: [198] Total time: 0:00:09 (0.0324 s / it)
+Averaged stats: lr: 0.000025  loss: 0.0954 (0.0932)
+Val: [198]  [ 0/71]  eta: 0:00:07  loss: 0.1201 (0.1201)  time: 0.1006  data: 0.0854  max mem: 757
+Val: [198]  [20/71]  eta: 0:00:00  loss: 0.1070 (0.1119)  time: 0.0085  data: 0.0003  max mem: 757
+Val: [198]  [40/71]  eta: 0:00:00  loss: 0.1278 (0.1477)  time: 0.0082  data: 0.0002  max mem: 757
+Val: [198]  [60/71]  eta: 0:00:00  loss: 0.3029 (0.1997)  time: 0.0082  data: 0.0002  max mem: 757
+Val: [198]  [70/71]  eta: 0:00:00  loss: 0.2511 (0.2042)  time: 0.0077  data: 0.0002  max mem: 757
+Val: [198] Total time: 0:00:00 (0.0099 s / it)
+Validation stats: loss: 0.2511 (0.2042)
+log_dir: ./output/eegdenoisenet
+Epoch: [199]  [  0/282]  eta: 0:00:38  lr: 0.000025  loss: 0.1180 (0.1180)  time: 0.1349  data: 0.0892  max mem: 757
+Epoch: [199]  [ 20/282]  eta: 0:00:09  lr: 0.000025  loss: 0.0852 (0.0926)  time: 0.0325  data: 0.0001  max mem: 757
+Epoch: [199]  [ 40/282]  eta: 0:00:08  lr: 0.000025  loss: 0.0895 (0.0910)  time: 0.0324  data: 0.0001  max mem: 757
+Epoch: [199]  [ 60/282]  eta: 0:00:07  lr: 0.000025  loss: 0.0901 (0.0909)  time: 0.0323  data: 0.0001  max mem: 757
+Epoch: [199]  [ 80/282]  eta: 0:00:06  lr: 0.000025  loss: 0.0913 (0.0916)  time: 0.0323  data: 0.0001  max mem: 757
+Epoch: [199]  [100/282]  eta: 0:00:06  lr: 0.000025  loss: 0.0908 (0.0916)  time: 0.0326  data: 0.0001  max mem: 757
+Epoch: [199]  [120/282]  eta: 0:00:05  lr: 0.000025  loss: 0.0901 (0.0915)  time: 0.0312  data: 0.0001  max mem: 757
+Epoch: [199]  [140/282]  eta: 0:00:04  lr: 0.000025  loss: 0.0893 (0.0915)  time: 0.0318  data: 0.0001  max mem: 757
+Epoch: [199]  [160/282]  eta: 0:00:03  lr: 0.000025  loss: 0.0950 (0.0920)  time: 0.0316  data: 0.0001  max mem: 757
+Epoch: [199]  [180/282]  eta: 0:00:03  lr: 0.000025  loss: 0.0883 (0.0920)  time: 0.0322  data: 0.0001  max mem: 757
+Epoch: [199]  [200/282]  eta: 0:00:02  lr: 0.000025  loss: 0.0969 (0.0924)  time: 0.0324  data: 0.0001  max mem: 757
+Epoch: [199]  [220/282]  eta: 0:00:02  lr: 0.000025  loss: 0.0942 (0.0926)  time: 0.0321  data: 0.0001  max mem: 757
+Epoch: [199]  [240/282]  eta: 0:00:01  lr: 0.000025  loss: 0.0879 (0.0923)  time: 0.0319  data: 0.0001  max mem: 757
+Epoch: [199]  [260/282]  eta: 0:00:00  lr: 0.000025  loss: 0.0956 (0.0927)  time: 0.0318  data: 0.0001  max mem: 757
+Epoch: [199]  [280/282]  eta: 0:00:00  lr: 0.000025  loss: 0.0955 (0.0929)  time: 0.0321  data: 0.0002  max mem: 757
+Epoch: [199]  [281/282]  eta: 0:00:00  lr: 0.000025  loss: 0.0956 (0.0929)  time: 0.0320  data: 0.0002  max mem: 757
+Epoch: [199] Total time: 0:00:09 (0.0326 s / it)
+Averaged stats: lr: 0.000025  loss: 0.0956 (0.0929)
+Val: [199]  [ 0/71]  eta: 0:00:07  loss: 0.0992 (0.0992)  time: 0.1044  data: 0.0912  max mem: 757
+Val: [199]  [20/71]  eta: 0:00:00  loss: 0.1165 (0.1128)  time: 0.0086  data: 0.0003  max mem: 757
+Val: [199]  [40/71]  eta: 0:00:00  loss: 0.1281 (0.1469)  time: 0.0087  data: 0.0003  max mem: 757
+Val: [199]  [60/71]  eta: 0:00:00  loss: 0.3030 (0.1986)  time: 0.0082  data: 0.0003  max mem: 757
+Val: [199]  [70/71]  eta: 0:00:00  loss: 0.2560 (0.2026)  time: 0.0078  data: 0.0002  max mem: 757
+Val: [199] Total time: 0:00:00 (0.0102 s / it)
+Validation stats: loss: 0.2560 (0.2026)
