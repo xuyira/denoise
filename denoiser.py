@@ -168,11 +168,14 @@ class Denoiser(nn.Module):
 
     @torch.no_grad()
     def _run_net(self, z, t, use_ema=True):
-        if not use_ema:
+        if use_ema is False or use_ema == "raw":
             return self.net(z, t)
 
         backup = [p.detach().clone() for p in self.parameters()]
-        ema = self.ema_params1 if self.ema_params1 is not None else backup
+        if use_ema == "ema2":
+            ema = self.ema_params2 if self.ema_params2 is not None else backup
+        else:
+            ema = self.ema_params1 if self.ema_params1 is not None else backup
         for p, p_ema in zip(self.parameters(), ema):
             p.data.copy_(p_ema)
 

@@ -53,6 +53,8 @@ def get_args_parser():
     parser.add_argument("--sampling_method", default="heun", choices=["euler", "heun"])
     parser.add_argument("--num_sampling_steps", type=int, default=50)
     parser.add_argument("--gen_bsz", type=int, default=64)
+    parser.add_argument("--ema_mode", default="ema1", choices=["raw", "ema1", "ema2"],
+                        help="Weights used during denoising: raw model, slow EMA1, or faster EMA2.")
     parser.add_argument("--num_samples", type=int, default=0,
                         help="0 evaluates the whole split.")
     parser.add_argument("--sampling_rate", type=float, default=256.0,
@@ -128,7 +130,7 @@ def main(args):
     for step, (noisy, clean, metadata) in enumerate(loader):
         noisy = noisy.to(device, non_blocking=True).float()
         clean = clean.to(device, non_blocking=True).float()
-        denoised = model.denoise(noisy).detach()
+        denoised = model.denoise(noisy, use_ema=args.ema_mode).detach()
 
         noisy_s = to_signal(noisy).cpu()
         clean_s = to_signal(clean).cpu()
@@ -177,7 +179,7 @@ def main(args):
         noisy_chunks.append(noisy_s)
         clean_chunks.append(clean_s)
         denoised_chunks.append(denoised_s)
-        print(f"  denoised {(step + 1) * noisy.shape[0]}/{len(dataset)}")
+        print(f"  denoised {min((step + 1) * args.gen_bsz, len(dataset))}/{len(dataset)}")
 
     noisy_all = torch.cat(noisy_chunks, dim=0)
     clean_all = torch.cat(clean_chunks, dim=0)
@@ -198,6 +200,7 @@ def main(args):
         "eval_snr_levels": args.eval_snr_levels,
         "sampling_rate": args.sampling_rate,
         "spectral_max_freq": args.spectral_max_freq,
+        "ema_mode": args.ema_mode,
         "metrics": {name: summarize(values) for name, values in metrics.items()},
         "per_snr": summarize_grouped(per_snr),
         "per_noise_type": summarize_grouped(per_noise_type),

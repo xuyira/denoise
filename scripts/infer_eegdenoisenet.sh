@@ -5,6 +5,7 @@ DATASETS_DIR="${1:-../EEGdenoiseNet/data}"
 CKPT="${2:-./output/eegdenoisenet}"
 OUTPUT_ROOT="${3:-./output/eegdenoisenet_eval}"
 NOISE_TYPE="${4:-eog}"
+EMA_MODE="${5:-ema1}"
 OUTPUT_DIR="${OUTPUT_ROOT}_${NOISE_TYPE}"
 
 python inference.py \
@@ -18,5 +19,6 @@ python inference.py \
   --target_length 512 \
   --eeg_patch_size 64 \
   --gen_bsz 64 \
+  --ema_mode "$EMA_MODE" \
   --num_sampling_steps 50 \
   --sampling_method heun 
