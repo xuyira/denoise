@@ -16,6 +16,7 @@ from engine_eeg import evaluate, train_one_epoch
 import util.misc as misc
 
 from data.data import build_dataloaders
+from data.eegdenoisenet_dataset import benchmark_eval_snr_levels, benchmark_snr_range
 
 
 _TARGET_LENGTH_DEFAULTS = {"tuab": 2000, "tuev": 1000, "tusz": 1000, "eegdenoisenet": 512}
@@ -39,10 +40,9 @@ def get_args_parser():
                         help="Length of each EEG segment; defaults to the dataset's recommended value.")
     parser.add_argument("--noise_types", nargs="+", default=["eog", "emg"], choices=["eog", "emg"],
                         help="EEGdenoiseNet artifact types used to synthesize noisy EEG.")
-    parser.add_argument("--train_snr_min", type=float, default=-7.0)
-    parser.add_argument("--train_snr_max", type=float, default=2.0)
-    parser.add_argument("--eval_snr_levels", nargs="+", type=float,
-                        default=[-7, -6, -5, -4, -3, -2, -1, 0, 1, 2])
+    parser.add_argument("--train_snr_min", type=float, default=None)
+    parser.add_argument("--train_snr_max", type=float, default=None)
+    parser.add_argument("--eval_snr_levels", nargs="+", type=float, default=None)
     parser.add_argument("--combin_num", type=int, default=10,
                         help="Synthetic combinations per clean EEG epoch for EEGdenoiseNet training.")
 
@@ -116,6 +116,15 @@ def main(args):
     if args.target_length % args.eeg_patch_size != 0:
         raise ValueError("target_length must be divisible by eeg_patch_size")
     args.eeg_patch_num = args.target_length // args.eeg_patch_size
+
+    if len(args.noise_types) != 1 and (args.train_snr_min is None or args.train_snr_max is None or args.eval_snr_levels is None):
+        raise ValueError("For EEGdenoiseNet benchmark runs, use one noise type at a time or pass explicit SNR settings.")
+
+    noise_type = args.noise_types[0] if len(args.noise_types) == 1 else None
+    if args.train_snr_min is None or args.train_snr_max is None:
+        args.train_snr_min, args.train_snr_max = benchmark_snr_range(noise_type)
+    if args.eval_snr_levels is None:
+        args.eval_snr_levels = list(benchmark_eval_snr_levels(noise_type))
 
     dataset_kwargs = {}
     if args.dataset.lower() == "eegdenoisenet":

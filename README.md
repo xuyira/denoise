@@ -26,7 +26,7 @@ The dataset loader synthesizes noisy EEG online:
 noisy = clean + scaled_artifact
 ```
 
-The artifact scale is chosen by SNR. Training samples draw SNR uniformly from `[-7, 2]` dB. Validation and test samples use fixed SNR levels from `-7` to `2` dB.
+The artifact scale is chosen by SNR. For `eog`, training/validation/test use `[-7, 2]` dB. For `emg`, training/validation/test use `[-7, 4]` dB.
 
 Expected layout:
 
@@ -51,7 +51,7 @@ For Apple Silicon, install the PyTorch build appropriate for your local environm
 ## Training
 
 ```bash
-bash scripts/train_eegdenoisenet.sh ../EEGdenoiseNet/data ./output/eegdenoisenet
+bash scripts/train_eegdenoisenet.sh ../EEGdenoiseNet/data ./output/eegdenoisenet eog
 ```
 
 Or run directly:
@@ -60,7 +60,8 @@ Or run directly:
 python train_eeg.py \
   --dataset eegdenoisenet \
   --datasets_dir ../EEGdenoiseNet/data \
-  --output_dir ./output/eegdenoisenet \
+  --output_dir ./output/eegdenoisenet_eog \
+  --noise_types eog \
   --model JiT-S/16 \
   --num_eeg_channels 1 \
   --target_length 512 \
@@ -81,7 +82,7 @@ checkpoint-best.pth
 ## Evaluation
 
 ```bash
-bash scripts/infer_eegdenoisenet.sh ../EEGdenoiseNet/data ./output/eegdenoisenet ./output/eegdenoisenet_eval
+bash scripts/infer_eegdenoisenet.sh ../EEGdenoiseNet/data ./output/eegdenoisenet_eog ./output/eegdenoisenet_eval eog
 ```
 
 Evaluation writes:
@@ -94,9 +95,9 @@ metrics.json
 The reported metrics are:
 
 ```text
-rrmse_time
-rrmse_freq
-correlation
+RRMSE_temporal
+RRMSE_spectral
+CC
 ```
 
 `metrics.json` reports the overall metrics and grouped results by:

@@ -7,6 +7,10 @@ from torch.utils.data import Dataset
 
 
 _SPLIT_RATIOS = {"train": 0.8, "val": 0.1, "test": 0.1}
+_SNR_RANGES = {
+    "eog": (-7.0, 2.0),
+    "emg": (-7.0, 4.0),
+}
 
 
 def _rms(x: np.ndarray) -> float:
@@ -25,6 +29,18 @@ def _split_indices(n: int, split: str, seed: int) -> np.ndarray:
     if split == "val":
         return indices[train_end:val_end]
     return indices[val_end:]
+
+
+def benchmark_snr_range(noise_type: str):
+    noise_type = noise_type.lower()
+    if noise_type not in _SNR_RANGES:
+        raise ValueError(f"Unsupported noise type '{noise_type}'.")
+    return _SNR_RANGES[noise_type]
+
+
+def benchmark_eval_snr_levels(noise_type: str):
+    snr_min, snr_max = benchmark_snr_range(noise_type)
+    return tuple(float(v) for v in range(int(snr_min), int(snr_max) + 1))
 
 
 class EEGDenoiseNetDataset(Dataset):

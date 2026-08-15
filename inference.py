@@ -10,6 +10,17 @@ import torch
 from torch.utils.data import DataLoader
 
 from data.data import build_base_dataset
+from data.eegdenoisenet_dataset import benchmark_eval_snr_levels, benchmark_snr_range
+from data.eegdenoisenet_metrics import (
+    append_group_metrics,
+    cc,
+    new_metric_store,
+    rrmse_spectral,
+    rrmse_temporal,
+    summarize,
+    summarize_grouped,
+    to_signal,
+)
 from denoiser import Denoiser
 
 
@@ -31,10 +42,9 @@ def get_args_parser():
     parser.add_argument("--proj_dropout", type=float, default=0.0)
 
     parser.add_argument("--noise_types", nargs="+", default=["eog", "emg"], choices=["eog", "emg"])
-    parser.add_argument("--train_snr_min", type=float, default=-7.0)
-    parser.add_argument("--train_snr_max", type=float, default=2.0)
-    parser.add_argument("--eval_snr_levels", nargs="+", type=float,
-                        default=[-7, -6, -5, -4, -3, -2, -1, 0, 1, 2])
+    parser.add_argument("--train_snr_min", type=float, default=None)
+    parser.add_argument("--train_snr_max", type=float, default=None)
+    parser.add_argument("--eval_snr_levels", nargs="+", type=float, default=None)
     parser.add_argument("--combin_num", type=int, default=10)
 
     parser.add_argument("--ema_decay1", type=float, default=0.9999)
@@ -65,68 +75,6 @@ def _resolve_ckpt_path(resume: str) -> Path:
     raise FileNotFoundError(f"Checkpoint not found at {resume}")
 
 
-def _to_signal(x: torch.Tensor) -> torch.Tensor:
-    return x.reshape(x.shape[0], x.shape[1], -1).float()
-
-
-def _rrmse_time(pred: torch.Tensor, clean: torch.Tensor) -> torch.Tensor:
-    num = torch.sqrt(torch.mean((pred - clean) ** 2, dim=(-2, -1)))
-    den = torch.sqrt(torch.mean(clean ** 2, dim=(-2, -1))).clamp_min(1e-8)
-    return num / den
-
-
-def _rrmse_spectral(
-    pred: torch.Tensor,
-    clean: torch.Tensor,
-    sampling_rate: float,
-    max_freq: float,
-) -> torch.Tensor:
-    pred_psd = torch.fft.rfft(pred, dim=-1).abs().pow(2)
-    clean_psd = torch.fft.rfft(clean, dim=-1).abs().pow(2)
-    freqs = torch.fft.rfftfreq(pred.shape[-1], d=1.0 / sampling_rate)
-    freq_mask = freqs <= max_freq
-    pred_psd = pred_psd[..., freq_mask]
-    clean_psd = clean_psd[..., freq_mask]
-    num = torch.sqrt(torch.mean((pred_psd - clean_psd) ** 2, dim=(-2, -1)))
-    den = torch.sqrt(torch.mean(clean_psd ** 2, dim=(-2, -1))).clamp_min(1e-8)
-    return num / den
-
-
-def _cc(pred: torch.Tensor, clean: torch.Tensor) -> torch.Tensor:
-    pred_f = pred.reshape(pred.shape[0], -1)
-    clean_f = clean.reshape(clean.shape[0], -1)
-    pred_c = pred_f - pred_f.mean(dim=1, keepdim=True)
-    clean_c = clean_f - clean_f.mean(dim=1, keepdim=True)
-    num = (pred_c * clean_c).sum(dim=1)
-    den = torch.sqrt((pred_c.pow(2).sum(dim=1) + 1e-8) * (clean_c.pow(2).sum(dim=1) + 1e-8))
-    return (num / den).clamp(-1.0, 1.0)
-
-
-def _summarize(values):
-    arr = np.asarray(values, dtype=np.float64)
-    return {
-        "mean": float(arr.mean()) if arr.size else None,
-        "std": float(arr.std()) if arr.size else None,
-    }
-
-
-def _new_metric_store():
-    return {"RRMSE_temporal": [], "RRMSE_spectral": [], "CC": []}
-
-
-def _append_group_metrics(store, key, rrmse_temporal, rrmse_spectral, cc):
-    store[key]["RRMSE_temporal"].extend(rrmse_temporal)
-    store[key]["RRMSE_spectral"].extend(rrmse_spectral)
-    store[key]["CC"].extend(cc)
-
-
-def _summarize_grouped(grouped):
-    return {
-        str(key): {metric: _summarize(values) for metric, values in metrics.items()}
-        for key, metrics in sorted(grouped.items(), key=lambda item: str(item[0]))
-    }
-
-
 def main(args):
     device = torch.device(args.device)
     torch.manual_seed(args.seed)
@@ -138,6 +86,15 @@ def main(args):
         raise ValueError("target_length must be divisible by eeg_patch_size")
     args.eeg_patch_num = args.target_length // args.eeg_patch_size
     args.class_num = 0
+
+    if len(args.noise_types) != 1 and (args.train_snr_min is None or args.train_snr_max is None or args.eval_snr_levels is None):
+        raise ValueError("For EEGdenoiseNet benchmark runs, use one noise type at a time or pass explicit SNR settings.")
+
+    noise_type = args.noise_types[0] if len(args.noise_types) == 1 else None
+    if args.train_snr_min is None or args.train_snr_max is None:
+        args.train_snr_min, args.train_snr_max = benchmark_snr_range(noise_type)
+    if args.eval_snr_levels is None:
+        args.eval_snr_levels = list(benchmark_eval_snr_levels(noise_type))
 
     dataset_kwargs = {
         "noise_types": args.noise_types,
@@ -163,28 +120,28 @@ def main(args):
     print(f"Loaded weights from {ckpt_path}")
 
     noisy_chunks, clean_chunks, denoised_chunks = [], [], []
-    metrics = _new_metric_store()
-    per_snr = defaultdict(_new_metric_store)
-    per_noise_type = defaultdict(_new_metric_store)
-    per_noise_type_snr = defaultdict(_new_metric_store)
+    metrics = new_metric_store()
+    per_snr = defaultdict(new_metric_store)
+    per_noise_type = defaultdict(new_metric_store)
+    per_noise_type_snr = defaultdict(new_metric_store)
 
     for step, (noisy, clean, metadata) in enumerate(loader):
         noisy = noisy.to(device, non_blocking=True).float()
         clean = clean.to(device, non_blocking=True).float()
         denoised = model.denoise(noisy).detach()
 
-        noisy_s = _to_signal(noisy).cpu()
-        clean_s = _to_signal(clean).cpu()
-        denoised_s = _to_signal(denoised).cpu()
+        noisy_s = to_signal(noisy).cpu()
+        clean_s = to_signal(clean).cpu()
+        denoised_s = to_signal(denoised).cpu()
 
-        batch_rrmse_temporal = _rrmse_time(denoised_s, clean_s).tolist()
-        batch_rrmse_spectral = _rrmse_spectral(
+        batch_rrmse_temporal = rrmse_temporal(denoised_s, clean_s).tolist()
+        batch_rrmse_spectral = rrmse_spectral(
             denoised_s,
             clean_s,
             sampling_rate=args.sampling_rate,
             max_freq=args.spectral_max_freq,
         ).tolist()
-        batch_cc = _cc(denoised_s, clean_s).tolist()
+        batch_cc = cc(denoised_s, clean_s).tolist()
 
         metrics["RRMSE_temporal"].extend(batch_rrmse_temporal)
         metrics["RRMSE_spectral"].extend(batch_rrmse_spectral)
@@ -241,10 +198,10 @@ def main(args):
         "eval_snr_levels": args.eval_snr_levels,
         "sampling_rate": args.sampling_rate,
         "spectral_max_freq": args.spectral_max_freq,
-        "metrics": {name: _summarize(values) for name, values in metrics.items()},
-        "per_snr": _summarize_grouped(per_snr),
-        "per_noise_type": _summarize_grouped(per_noise_type),
-        "per_noise_type_snr": _summarize_grouped(per_noise_type_snr),
+        "metrics": {name: summarize(values) for name, values in metrics.items()},
+        "per_snr": summarize_grouped(per_snr),
+        "per_noise_type": summarize_grouped(per_noise_type),
+        "per_noise_type_snr": summarize_grouped(per_noise_type_snr),
     }
     with open(output_dir / "metrics.json", "w") as f:
         json.dump(summary, f, indent=2)
