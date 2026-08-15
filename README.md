@@ -98,3 +98,11 @@ rrmse_time
 rrmse_freq
 correlation
 ```
+
+`metrics.json` reports the overall metrics and grouped results by:
+
+```text
+per_snr
+per_noise_type
+per_noise_type_snr
+```

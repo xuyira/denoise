@@ -40,6 +40,7 @@ class EEGDenoiseNetDataset(Dataset):
         combin_num: int = 10,
         seed: int = 0,
         normalize: bool = True,
+        return_metadata: bool = False,
     ):
         super().__init__()
         self.data_dir = Path(data_dir)
@@ -50,6 +51,7 @@ class EEGDenoiseNetDataset(Dataset):
         self.combin_num = int(combin_num)
         self.seed = int(seed)
         self.normalize = normalize
+        self.return_metadata = return_metadata
         self._rng = np.random.default_rng(self.seed + {"train": 0, "val": 1, "test": 2}[split])
 
         self.clean = np.load(self.data_dir / "EEG_all_epochs.npy", mmap_mode="r")
@@ -131,4 +133,12 @@ class EEGDenoiseNetDataset(Dataset):
 
         noisy = torch.from_numpy(noisy.astype(np.float32)).unsqueeze(0)
         clean = torch.from_numpy(clean.astype(np.float32)).unsqueeze(0)
+        if self.return_metadata:
+            metadata = {
+                "noise_type": noise_type,
+                "snr_db": float(snr_db),
+                "clean_idx": int(clean_idx),
+                "artifact_idx": int(artifact_idx),
+            }
+            return noisy, clean, metadata
         return noisy, clean

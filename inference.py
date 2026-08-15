@@ -1,6 +1,7 @@
 """Denoise EEGdenoiseNet samples and report denoising metrics."""
 
 import argparse
+from collections import defaultdict
 import json
 from pathlib import Path
 
@@ -96,6 +97,19 @@ def _summarize(values):
     }
 
 
+def _append_group_metrics(store, key, rrmse_time, rrmse_freq, corr):
+    store[key]["rrmse_time"].extend(rrmse_time)
+    store[key]["rrmse_freq"].extend(rrmse_freq)
+    store[key]["corr"].extend(corr)
+
+
+def _summarize_grouped(grouped):
+    return {
+        str(key): {metric: _summarize(values) for metric, values in metrics.items()}
+        for key, metrics in sorted(grouped.items(), key=lambda item: str(item[0]))
+    }
+
+
 def main(args):
     device = torch.device(args.device)
     torch.manual_seed(args.seed)
@@ -114,6 +128,7 @@ def main(args):
         "eval_snr_levels": args.eval_snr_levels,
         "combin_num": args.combin_num,
         "seed": args.seed,
+        "return_metadata": True,
     }
     dataset = build_base_dataset(args.dataset, args.eval_split, Path(args.datasets_dir), **dataset_kwargs)
     if args.num_samples and args.num_samples > 0:
@@ -132,8 +147,11 @@ def main(args):
 
     noisy_chunks, clean_chunks, denoised_chunks = [], [], []
     metrics = {"rrmse_time": [], "rrmse_freq": [], "corr": []}
+    per_snr = defaultdict(lambda: {"rrmse_time": [], "rrmse_freq": [], "corr": []})
+    per_noise_type = defaultdict(lambda: {"rrmse_time": [], "rrmse_freq": [], "corr": []})
+    per_noise_type_snr = defaultdict(lambda: {"rrmse_time": [], "rrmse_freq": [], "corr": []})
 
-    for step, (noisy, clean) in enumerate(loader):
+    for step, (noisy, clean, metadata) in enumerate(loader):
         noisy = noisy.to(device, non_blocking=True).float()
         clean = clean.to(device, non_blocking=True).float()
         denoised = model.denoise(noisy).detach()
@@ -142,9 +160,22 @@ def main(args):
         clean_s = _to_signal(clean).cpu()
         denoised_s = _to_signal(denoised).cpu()
 
-        metrics["rrmse_time"].extend(_rrmse_time(denoised_s, clean_s).tolist())
-        metrics["rrmse_freq"].extend(_rrmse_freq(denoised_s, clean_s).tolist())
-        metrics["corr"].extend(_corr(denoised_s, clean_s).tolist())
+        batch_rrmse_time = _rrmse_time(denoised_s, clean_s).tolist()
+        batch_rrmse_freq = _rrmse_freq(denoised_s, clean_s).tolist()
+        batch_corr = _corr(denoised_s, clean_s).tolist()
+
+        metrics["rrmse_time"].extend(batch_rrmse_time)
+        metrics["rrmse_freq"].extend(batch_rrmse_freq)
+        metrics["corr"].extend(batch_corr)
+
+        noise_types = metadata["noise_type"]
+        snr_values = metadata["snr_db"].tolist()
+        for i, (noise_type, snr_db) in enumerate(zip(noise_types, snr_values)):
+            snr_key = f"{float(snr_db):g}"
+            combo_key = f"{noise_type}_{snr_key}dB"
+            _append_group_metrics(per_snr, snr_key, [batch_rrmse_time[i]], [batch_rrmse_freq[i]], [batch_corr[i]])
+            _append_group_metrics(per_noise_type, noise_type, [batch_rrmse_time[i]], [batch_rrmse_freq[i]], [batch_corr[i]])
+            _append_group_metrics(per_noise_type_snr, combo_key, [batch_rrmse_time[i]], [batch_rrmse_freq[i]], [batch_corr[i]])
 
         noisy_chunks.append(noisy_s)
         clean_chunks.append(clean_s)
@@ -169,6 +200,9 @@ def main(args):
         "noise_types": args.noise_types,
         "eval_snr_levels": args.eval_snr_levels,
         "metrics": {name: _summarize(values) for name, values in metrics.items()},
+        "per_snr": _summarize_grouped(per_snr),
+        "per_noise_type": _summarize_grouped(per_noise_type),
+        "per_noise_type_snr": _summarize_grouped(per_noise_type_snr),
     }
     with open(output_dir / "metrics.json", "w") as f:
         json.dump(summary, f, indent=2)
