@@ -5,7 +5,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from models.common import TimestepEmbedder, LabelEmbedder
+from models.common import TimestepEmbedder
 from util.model_util import get_1d_sincos_pos_embed_from_grid
 
 
@@ -72,6 +72,10 @@ class _RawViTSpec:
 
 
 RAW_VIT_SPECS: Dict[str, _RawViTSpec] = {
+    'JiT-T/16': _RawViTSpec(hidden_size=256, depth=6, num_heads=4, mlp_ratio=4.0),
+    'JiT-T/32': _RawViTSpec(hidden_size=256, depth=6, num_heads=4, mlp_ratio=4.0),
+    'JiT-S/16': _RawViTSpec(hidden_size=384, depth=8, num_heads=6, mlp_ratio=4.0),
+    'JiT-S/32': _RawViTSpec(hidden_size=384, depth=8, num_heads=6, mlp_ratio=4.0),
     'JiT-B/16': _RawViTSpec(hidden_size=768, depth=12, num_heads=12, mlp_ratio=4.0),
     'JiT-B/32': _RawViTSpec(hidden_size=768, depth=12, num_heads=12, mlp_ratio=4.0),
     'JiT-L/16': _RawViTSpec(hidden_size=1024, depth=24, num_heads=16, mlp_ratio=4.0),
@@ -90,7 +94,6 @@ class RawViTDiffusion(nn.Module):
         num_channels: int,
         patch_size: int,
         target_length: int,
-        num_classes: int,
         attn_dropout: float = 0.0,
         proj_dropout: float = 0.0,
     ):
@@ -109,7 +112,6 @@ class RawViTDiffusion(nn.Module):
         self.output_shape = (num_channels, self.patch_num, patch_size)
 
         self.t_embedder = TimestepEmbedder(self.hidden_size)
-        self.y_embedder = LabelEmbedder(num_classes, self.hidden_size)
 
         self.patch_embed = nn.Linear(patch_size, self.hidden_size)
         positions = np.arange(self.patch_num, dtype=np.float32)
@@ -137,7 +139,7 @@ class RawViTDiffusion(nn.Module):
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0.0)
 
-    def forward(self, x: torch.Tensor, t: torch.Tensor, y: torch.Tensor) -> torch.Tensor:
+    def forward(self, x: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
         if x.dim() != 4:
             raise ValueError("RawViTDiffusion expects tensors of shape (B, C, patches, patch_size)")
         bsz, channels, patch_num, patch_size = x.shape
@@ -146,7 +148,7 @@ class RawViTDiffusion(nn.Module):
         if patch_num != self.patch_num or patch_size != self.patch_size:
             raise ValueError("Input patch dimensions do not match the configured target length/patch size")
 
-        cond = self.t_embedder(t) + self.y_embedder(y)
+        cond = self.t_embedder(t)
         cond = cond.repeat_interleave(channels, dim=0)
 
         feats = self.patch_embed(x)

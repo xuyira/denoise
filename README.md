@@ -1,34 +1,41 @@
-<div align="center">
+# JET Flow Matching for EEG Denoising
 
-<h1>Let EEG Models Learn EEG</h1>
-<h3>✨ ICML 2026 ✨</h3>
+This repository adapts the JET EEG flow-matching code to supervised EEG denoising on EEGdenoiseNet.
 
-<br>
+The training task is:
 
-Yifan Wang<sup>1</sup>, Yijia Ma<sup>2</sup>, Wen Li<sup>2</sup>, Chenyu You<sup>1</sup>
+```text
+noisy EEG -> clean EEG
+```
 
-<sup>1</sup>Stony Brook University &nbsp; <sup>2</sup>University of Texas Health Center at Houston
+Unlike the original class-conditional JET setup, the model does not use class labels. The noisy EEG is the flow source and the clean EEG is the target.
 
-<p>
-  <a href="https://arxiv.org/abs/2605.21280">
-    <img src="https://img.shields.io/badge/ArXiv-2605.21280-B31B1B?style=flat-square&logo=arxiv" alt="arXiv">
-  </a>
-  <a href="https://y-research-sbu.github.io/JET/">
-    <img src="https://img.shields.io/badge/Project-Website-4285F4?style=flat-square&logo=googlechrome" alt="Project Page">
-  </a>
-  <a href="https://huggingface.co/Y-Research-Group/JET">
-    <img src="https://img.shields.io/badge/Hugging%20Face-Model-F9A825?style=flat-square&logo=huggingface" alt="Hugging Face">
-  </a>
- 
-</p>
+## Data
 
-</div>
+EEGdenoiseNet provides separate clean EEG and artifact epochs:
 
----
+```text
+EEG_all_epochs.npy  clean EEG, shape [4514, 512]
+EOG_all_epochs.npy  ocular artifacts, shape [3400, 512]
+EMG_all_epochs.npy  muscular artifacts, shape [5598, 512]
+```
 
-<div align="center">
-<img src="docs/figures/main.svg" width="99%">
-</div>
+The dataset loader synthesizes noisy EEG online:
+
+```text
+noisy = clean + scaled_artifact
+```
+
+The artifact scale is chosen by SNR. Training samples draw SNR uniformly from `[-7, 2]` dB. Validation and test samples use fixed SNR levels from `-7` to `2` dB.
+
+Expected layout:
+
+```text
+EEGdenoiseNet/data/
+├── EEG_all_epochs.npy
+├── EOG_all_epochs.npy
+└── EMG_all_epochs.npy
+```
 
 ## Installation
 
@@ -39,120 +46,54 @@ pip install torch --index-url https://download.pytorch.org/whl/cu128
 pip install -r requirements.txt
 ```
 
-## Data Preprocessing
-
-JET trains on three corpora from the [Temple University Hospital EEG project](https://isip.piconepress.com/projects/nedc/html/tuh_eeg/). Each dataset must be requested and downloaded with the TUH credentials.
-
-| Dataset | Source                                                                                                                                          | Notes                                |
-|---------|-------------------------------------------------------------------------------------------------------------------------------------------------|--------------------------------------|
-| TUAB    | [`tuh_eeg_abnormal`](https://isip.piconepress.com/projects/nedc/data/tuh_eeg/tuh_eeg_abnormal/)                                    | normal vs. abnormal recordings       |
-| TUEV    | [`tuh_eeg_events`](https://isip.piconepress.com/projects/nedc/data/tuh_eeg/tuh_eeg_events/)                                        | 6-class EEG events (.edf + .rec)     |
-| TUSZ    | [`tuh_eeg_seizure`](https://isip.piconepress.com/projects/nedc/data/tuh_eeg/tuh_eeg_seizure/)                                      | background vs. seizure (.edf + .tse) |
-
-
-```bash
-python data/preprocess_tuab.py \
-  --input-dir  /path/to/tuh_eeg_abnormal/edf \
-  --output-dir ./datasets/tuab
-
-python data/preprocess_tuev.py \
-  --input-dir  /path/to/tuh_eeg_events/edf \
-  --output-dir ./datasets/tuev
-
-python data/preprocess_tusz.py \
-  --input-dir  /path/to/tuh_eeg_seizure/edf \
-  --output-dir ./datasets/tusz
-```
-
-The resulting layout is:
-
-```text
-datasets/
-├── tuab/
-│   ├── train/*.pkl    
-│   ├── val/*.pkl
-│   └── test/*.pkl
-├── tuev/
-│   ├── train/*.pkl    
-│   ├── val/*.pkl
-│   └── test/*.pkl
-└── tusz/
-    ├── train/*.pkl    
-    ├── val/*.pkl
-    └── test/*.pkl
-```
+For Apple Silicon, install the PyTorch build appropriate for your local environment.
 
 ## Training
 
-Train JET on TUAB / TUEV / TUSZ directly using the scripts:
-
 ```bash
-bash scripts/train_tuab.sh /path/to/datasets/tuab ./output/tuab
-bash scripts/train_tuev.sh /path/to/datasets/tuev ./output/tuev
-bash scripts/train_tusz.sh /path/to/datasets/tusz ./output/tusz
+bash scripts/train_eegdenoisenet.sh ../EEGdenoiseNet/data ./output/eegdenoisenet
 ```
 
-Or run `train_eeg.py` directly:
+Or run directly:
 
 ```bash
 python train_eeg.py \
-  --dataset tuab \
-  --datasets_dir /path/to/datasets/tuab \
-  --output_dir ./output/tuab \
-  --model JiT-B/16 \
-  --num_eeg_channels 16 --target_length 2000 --eeg_patch_size 200 \
-  --batch_size 256 --epochs 200 --blr 5e-5 \
-  --loss_type mix --loss_weight_stat 1.0 --loss_weight_tv 0.1 --loss_weight_corr 0.1
+  --dataset eegdenoisenet \
+  --datasets_dir ../EEGdenoiseNet/data \
+  --output_dir ./output/eegdenoisenet \
+  --model JiT-S/16 \
+  --num_eeg_channels 1 \
+  --target_length 512 \
+  --eeg_patch_size 64 \
+  --batch_size 128 \
+  --epochs 200 \
+  --loss_type l2
 ```
 
-Training writes a TensorBoard run and `checkpoint-last.pth` under `--output_dir`.
+Checkpoints are written under `--output_dir`:
 
-## Inference
+```text
+checkpoint-last.pth
+checkpoint-best.pth
+```
 
-Run inference for TUAB / TUEV / TUSZ directly using the scripts:
+## Evaluation
 
 ```bash
-bash scripts/infer_tuab.sh /path/to/datasets/tuab ./ckpt/jet_tuab ./output/eval_tuab
-bash scripts/infer_tuev.sh /path/to/datasets/tuev ./ckpt/jet_tuev ./output/eval_tuev
-bash scripts/infer_tusz.sh /path/to/datasets/tusz ./ckpt/jet_tusz ./output/eval_tusz
+bash scripts/infer_eegdenoisenet.sh ../EEGdenoiseNet/data ./output/eegdenoisenet ./output/eegdenoisenet_eval
 ```
 
-Or run `inference.py` directly:
+Evaluation writes:
 
-```bash
-python inference.py \
-  --dataset tuab \
-  --datasets_dir /path/to/datasets/tuab \
-  --resume ./ckpt/jet_tuab \
-  --output_dir ./output/eval_tuab \
-  --num_images 0 --gen_bsz 64 \
-  --eval_split train --eval_label_mode match_gt
+```text
+eval_batch.npz
+metrics.json
 ```
 
-Each run writes `eval_batch.npz` and `metrics.json` under the output directory.
+The reported metrics are:
 
-<!-- ## Released Checkpoints
-
-| Dataset | Checkpoint |
-|---|---|
-| TUAB | `ckpt/jet_tuab` |
-| TUEV | `ckpt/jet_tuev` |
-| TUSZ | `ckpt/jet_tusz` | -->
-
-
-## Citation
-
-If you find this work useful, please consider citing:
-
-```bibtex
-@article{wang2026let,
-  title   = {Let EEG Models Learn EEG},
-  author  = {Wang, Yifan and Ma, Yijia and Li, Wen and You, Chenyu},
-  journal = {ICML},
-  year    = {2026}
-}
+```text
+rrmse_time
+rrmse_freq
+correlation
 ```
-
-## License
-
-This project is released under the [MIT License](LICENSE).

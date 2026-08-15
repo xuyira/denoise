@@ -13,7 +13,6 @@ class Denoiser(nn.Module):
             num_channels=args.num_eeg_channels,
             patch_size=args.eeg_patch_size,
             target_length=args.target_length,
-            num_classes=args.class_num,
             attn_dropout=args.attn_dropout,
             proj_dropout=args.proj_dropout,
         )
@@ -23,14 +22,6 @@ class Denoiser(nn.Module):
         self.raw_vit_patch_size = args.eeg_patch_size
         self.raw_vit_patch_num = args.eeg_patch_num
 
-        self.num_classes = args.class_num
-
-        self.label_drop_prob = args.label_drop_prob
-        self.P_mean = args.P_mean
-        self.P_std = args.P_std
-        self.t_eps = args.t_eps
-        self.noise_scale = args.noise_scale
-        self.noise_type = getattr(args, "noise_type", "gs")
         self.loss_type = getattr(args, "loss_type", "l2")
         self.loss_weight_stft = getattr(args, "loss_weight_stft", 0.2)
         self.loss_weight_stat = getattr(args, "loss_weight_stat", 1.0)
@@ -44,19 +35,9 @@ class Denoiser(nn.Module):
 
         self.method = args.sampling_method
         self.steps = args.num_sampling_steps
-        self.cfg_scale = args.cfg
-        self.cfg_interval = (args.interval_min, args.interval_max)
 
-    def drop_labels(self, labels):
-        drop = torch.rand(labels.shape[0], device=labels.device) < self.label_drop_prob
-        return torch.where(drop, torch.full_like(labels, self.num_classes), labels)
-
-    def sample_t(self, n: int, device=None, noise_type: str = None):
-        noise_type = noise_type or self.noise_type
-        if noise_type == "zero":
-            return torch.ones(n, device=device)
-        z = torch.randn(n, device=device) * self.P_std + self.P_mean
-        return torch.sigmoid(z)
+    def sample_t(self, n: int, device=None):
+        return torch.rand(n, device=device)
 
     def to_training_space(self, batch: torch.Tensor) -> torch.Tensor:
         return self._raw_vit_to_patches(batch)
@@ -93,26 +74,24 @@ class Denoiser(nn.Module):
             batch = batch.squeeze(0)
         return batch
 
-    def forward(self, x, labels):
-        x = self.to_training_space(x)
-        labels_dropped = self.drop_labels(labels) if self.training else labels
+    def forward(self, noisy, clean):
+        noisy = self.to_training_space(noisy)
+        clean = self.to_training_space(clean)
 
-        t = self.sample_t(x.size(0), device=x.device).view(-1, *([1] * (x.ndim - 1)))
-        e = self._noise_like(x)
+        t = self.sample_t(clean.size(0), device=clean.device).view(-1, *([1] * (clean.ndim - 1)))
+        z = (1 - t) * noisy + t * clean
+        v = clean - noisy
 
-        z = t * x + (1 - t) * e
-        v = (x - z) / (1 - t).clamp_min(self.t_eps)
+        v_pred = self.net(z, t.flatten())
+        clean_pred = z + (1 - t) * v_pred
 
-        x_pred = self.net(z, t.flatten(), labels_dropped)
-        v_pred = (x_pred - z) / (1 - t).clamp_min(self.t_eps)
-
-        return self._compute_loss(v, v_pred, x, x_pred)
+        return self._compute_loss(v, v_pred, clean, clean_pred)
 
     def _compute_loss(self, v, v_pred, x, x_pred):
         loss_l1 = (x - x_pred).abs().mean()
 
         if self.loss_type == "mix":
-            mix_loss = loss_l1
+            mix_loss = ((v - v_pred) ** 2).mean() + loss_l1
 
             if self.loss_weight_stft > 0:
                 fft_sizes = [64, 128, 256, 512, 1024]
@@ -180,11 +159,6 @@ class Denoiser(nn.Module):
         corr = numerator / denominator
         return (1.0 - corr.clamp(-1.0, 1.0)).mean()
 
-    def _noise_like(self, x):
-        if self.noise_type == "zero":
-            return torch.zeros_like(x)
-        return torch.randn_like(x) * self.noise_scale
-
     @torch.no_grad()
     def update_ema(self):
         for p, p_ema1, p_ema2 in zip(self.parameters(), self.ema_params1, self.ema_params2):
@@ -192,58 +166,51 @@ class Denoiser(nn.Module):
             p_ema2.mul_(self.ema_decay2).add_(p.data, alpha=1.0 - self.ema_decay2)
 
     @torch.no_grad()
-    def _run_net(self, z, t, labels, use_ema=True):
+    def _run_net(self, z, t, use_ema=True):
         if not use_ema:
-            return self.net(z, t, labels)
+            return self.net(z, t)
 
         backup = [p.detach().clone() for p in self.parameters()]
         ema = self.ema_params1 if self.ema_params1 is not None else backup
         for p, p_ema in zip(self.parameters(), ema):
             p.data.copy_(p_ema)
 
-        out = self.net(z, t, labels)
+        out = self.net(z, t)
 
         for p, old in zip(self.parameters(), backup):
             p.data.copy_(old)
         return out
 
     @torch.no_grad()
-    def generate(self, labels, cfg=None, noise_type=None):
-        b = labels.shape[0]
-        device = labels.device
-        cfg_scale = self.cfg_scale if cfg is None else cfg
-
-        z = self._noise_like(torch.empty((b,) + self.sample_shape, device=device))
-        if noise_type == "zero":
-            z = torch.zeros_like(z)
+    def denoise(self, noisy, use_ema=True):
+        z = self.to_training_space(noisy)
+        b = z.shape[0]
+        device = z.device
 
         steps = self.steps
         use_heun = self.method == "heun"
         t_schedule = torch.linspace(0.0, 1.0, steps + 1, device=device)
 
-        def _get_x_pred(z_in, t_scalar):
+        def _get_v(z_in, t_scalar):
             t_vec = torch.full((b,), t_scalar, device=device)
-            x_cond = self._run_net(z_in, t_vec, labels, use_ema=True)
-            if cfg_scale > 1.0:
-                null_labels = torch.full_like(labels, self.num_classes)
-                x_uncond = self._run_net(z_in, t_vec, null_labels, use_ema=True)
-                return x_uncond + cfg_scale * (x_cond - x_uncond)
-            return x_cond
+            return self._run_net(z_in, t_vec, use_ema=use_ema)
 
         for i in range(steps):
             t_cur = float(t_schedule[i])
             t_nxt = float(t_schedule[i + 1])
             dt = t_nxt - t_cur
 
-            x1 = _get_x_pred(z, t_cur)
-            v1 = (x1 - z) / max(self.t_eps, (1.0 - t_cur))
+            v1 = _get_v(z, t_cur)
 
             if use_heun and i < steps - 1:
                 z_euler = z + dt * v1
-                x2 = _get_x_pred(z_euler, t_nxt)
-                v2 = (x2 - z_euler) / max(self.t_eps, (1.0 - t_nxt))
+                v2 = _get_v(z_euler, t_nxt)
                 z = z + dt * 0.5 * (v1 + v2)
             else:
                 z = z + dt * v1
 
         return z
+
+    @torch.no_grad()
+    def generate(self, noisy, **_kwargs):
+        return self.denoise(noisy)

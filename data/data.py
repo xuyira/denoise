@@ -7,12 +7,14 @@ import numpy as np
 from .tuab_dataset import CustomDataset as TuabDataset
 from .tuev_dataset import CustomDataset as TuevDataset
 from .tusz_dataset import CustomDataset as TuszDataset
+from .eegdenoisenet_dataset import EEGDenoiseNetDataset
 
 
 DATASET_REGISTRY = {
-    "tuab": {"factory": TuabDataset, "num_classes": 2},
-    "tuev": {"factory": TuevDataset, "num_classes": 6},
-    "tusz": {"factory": TuszDataset, "num_classes": 2},
+    "tuab": {"factory": TuabDataset, "num_classes": 2, "task": "generation"},
+    "tuev": {"factory": TuevDataset, "num_classes": 6, "task": "generation"},
+    "tusz": {"factory": TuszDataset, "num_classes": 2, "task": "generation"},
+    "eegdenoisenet": {"factory": EEGDenoiseNetDataset, "num_classes": 0, "task": "denoising"},
 }
 
 
@@ -64,23 +66,27 @@ def _compute_sample_weights(dataset: Dataset, num_classes: int):
 class TransformedDataset(Dataset):
     """Apply an optional transform to individual EEG examples."""
 
-    def __init__(self, base_dataset: Dataset, transform: Callable = None):
+    def __init__(self, base_dataset: Dataset, transform: Callable = None, task: str = "generation"):
         self.base_dataset = base_dataset
         self.transform = transform
+        self.task = task
 
     def __len__(self):
         return len(self.base_dataset)
 
     def __getitem__(self, idx):
-        data, label = self.base_dataset[idx]
-        data = torch.tensor(data, dtype=torch.float32)
-        label = torch.tensor(int(label), dtype=torch.long)
+        data, target = self.base_dataset[idx]
+        data = torch.as_tensor(data, dtype=torch.float32)
+        if self.task == "denoising":
+            target = torch.as_tensor(target, dtype=torch.float32)
+        else:
+            target = torch.tensor(int(target), dtype=torch.long)
         if self.transform is not None:
             data = self.transform(data)
-        return data, label
+        return data, target
 
 
-def build_base_dataset(dataset_name: str, split: str, datasets_dir: Path):
+def build_base_dataset(dataset_name: str, split: str, datasets_dir: Path, **dataset_kwargs):
     dataset_name = dataset_name.lower()
     if dataset_name not in DATASET_REGISTRY:
         raise ValueError(f"Unsupported dataset {dataset_name}")
@@ -96,6 +102,8 @@ def build_base_dataset(dataset_name: str, split: str, datasets_dir: Path):
         return factory(split_path, [f.name for f in files])
     if dataset_name == "tusz":
         return factory(datasets_dir, split=split)
+    if dataset_name == "eegdenoisenet":
+        return factory(datasets_dir, split=split, **dataset_kwargs)
 
     raise ValueError(f"Unsupported dataset {dataset_name}")
 
@@ -110,28 +118,31 @@ def build_dataloaders(
     num_tasks: int = 1,
     global_rank: int = 0,
     use_weighted_sampler: bool = False,
+    dataset_kwargs: Dict = None,
 ) -> Tuple[Dict[str, DataLoader], int]:
-    """Construct dataloaders for TUAB/TUEV/TUSZ and return num_classes."""
+    """Construct dataloaders and return num_classes for class-conditional datasets."""
     dataset_name = dataset_name.lower()
     if dataset_name not in DATASET_REGISTRY:
         raise ValueError(f"Unknown dataset {dataset_name}")
 
     datasets_dir = Path(datasets_dir)
     entry = DATASET_REGISTRY[dataset_name]
+    task = entry.get("task", "generation")
+    dataset_kwargs = dataset_kwargs or {}
     dataloaders: Dict[str, DataLoader] = {}
 
     if use_weighted_sampler and distributed and global_rank == 0:
         print("WeightedRandomSampler is disabled under distributed training; falling back to DistributedSampler.")
 
     for split in ["train", "val", "test"]:
-        base_ds = build_base_dataset(dataset_name, split, datasets_dir)
-        ds = TransformedDataset(base_ds, transform=transform)
+        base_ds = build_base_dataset(dataset_name, split, datasets_dir, **dataset_kwargs)
+        ds = TransformedDataset(base_ds, transform=transform, task=task)
         sampler = None
         if distributed:
             sampler = torch.utils.data.distributed.DistributedSampler(
                 ds, num_replicas=num_tasks, rank=global_rank, shuffle=split == "train"
             )
-        elif use_weighted_sampler and split == "train":
+        elif use_weighted_sampler and split == "train" and task != "denoising":
             weights = _compute_sample_weights(ds, entry["num_classes"])
             sampler = torch.utils.data.WeightedRandomSampler(
                 weights, num_samples=len(weights), replacement=True

@@ -1,4 +1,4 @@
-"""Train JET on TUAB / TUEV / TUSZ."""
+"""Train JET-style flow matching for EEG denoising."""
 
 import argparse
 import datetime
@@ -12,13 +12,13 @@ import torch.backends.cudnn as cudnn
 from torch.utils.tensorboard import SummaryWriter
 
 from denoiser import Denoiser
-from engine_eeg import train_one_epoch
+from engine_eeg import evaluate, train_one_epoch
 import util.misc as misc
 
 from data.data import build_dataloaders
 
 
-_TARGET_LENGTH_DEFAULTS = {"tuab": 2000, "tuev": 1000, "tusz": 1000}
+_TARGET_LENGTH_DEFAULTS = {"tuab": 2000, "tuev": 1000, "tusz": 1000, "eegdenoisenet": 512}
 
 
 def get_args_parser():
@@ -28,15 +28,23 @@ def get_args_parser():
     parser.add_argument("--model", default="JiT-B/16", type=str, metavar="MODEL")
     parser.add_argument("--attn_dropout", type=float, default=0.0)
     parser.add_argument("--proj_dropout", type=float, default=0.0)
-    parser.add_argument("--eeg_patch_size", type=int, default=200)
+    parser.add_argument("--eeg_patch_size", type=int, default=64)
 
     # dataset
-    parser.add_argument("--dataset", default="tuab", choices=["tuab", "tuev", "tusz"])
+    parser.add_argument("--dataset", default="eegdenoisenet", choices=["eegdenoisenet"])
     parser.add_argument("--datasets_dir", type=str, required=True,
-                        help="Root folder of the EEG dataset (expects train/val/test subdirs).")
-    parser.add_argument("--num_eeg_channels", type=int, default=16)
+                        help="Root folder of the EEG dataset.")
+    parser.add_argument("--num_eeg_channels", type=int, default=1)
     parser.add_argument("--target_length", type=int, default=None,
                         help="Length of each EEG segment; defaults to the dataset's recommended value.")
+    parser.add_argument("--noise_types", nargs="+", default=["eog", "emg"], choices=["eog", "emg"],
+                        help="EEGdenoiseNet artifact types used to synthesize noisy EEG.")
+    parser.add_argument("--train_snr_min", type=float, default=-7.0)
+    parser.add_argument("--train_snr_max", type=float, default=2.0)
+    parser.add_argument("--eval_snr_levels", nargs="+", type=float,
+                        default=[-7, -6, -5, -4, -3, -2, -1, 0, 1, 2])
+    parser.add_argument("--combin_num", type=int, default=10,
+                        help="Synthetic combinations per clean EEG epoch for EEGdenoiseNet training.")
 
     # training
     parser.add_argument("--epochs", default=200, type=int)
@@ -50,30 +58,19 @@ def get_args_parser():
     parser.add_argument("--ema_decay1", type=float, default=0.9999)
     parser.add_argument("--ema_decay2", type=float, default=0.9996)
 
-    # flow-matching / noise schedule
-    parser.add_argument("--P_mean", default=-0.8, type=float)
-    parser.add_argument("--P_std", default=0.8, type=float)
-    parser.add_argument("--noise_scale", default=1.0, type=float)
-    parser.add_argument("--noise_type", default="gs", choices=["gs", "zero"])
-    parser.add_argument("--t_eps", default=5e-2, type=float)
-    parser.add_argument("--label_drop_prob", default=0.1, type=float)
-
     # loss
-    parser.add_argument("--loss_type", default="mix", choices=["l1", "l2", "mix"])
+    parser.add_argument("--loss_type", default="l2", choices=["l1", "l2", "mix"])
     parser.add_argument("--loss_weight_stft", type=float, default=0.0)
     parser.add_argument("--loss_weight_stat", type=float, default=0.0)
-    parser.add_argument("--loss_weight_tv", type=float, default=0.05)
-    parser.add_argument("--loss_weight_corr", type=float, default=0.05)
+    parser.add_argument("--loss_weight_tv", type=float, default=0.0)
+    parser.add_argument("--loss_weight_corr", type=float, default=0.0)
 
     # sampling
     parser.add_argument("--sampling_method", default="heun", choices=["euler", "heun"])
     parser.add_argument("--num_sampling_steps", default=50, type=int)
-    parser.add_argument("--cfg", default=1.0, type=float)
-    parser.add_argument("--interval_min", default=0.0, type=float)
-    parser.add_argument("--interval_max", default=1.0, type=float)
 
     # data loading
-    parser.add_argument("--weighted_sampler", action="store_true", dest="weighted_sampler", default=True)
+    parser.add_argument("--weighted_sampler", action="store_true", dest="weighted_sampler", default=False)
     parser.add_argument("--no_weighted_sampler", action="store_false", dest="weighted_sampler")
     parser.add_argument("--num_workers", default=4, type=int)
     parser.add_argument("--pin_mem", action="store_true", default=True)
@@ -119,6 +116,16 @@ def main(args):
         raise ValueError("target_length must be divisible by eeg_patch_size")
     args.eeg_patch_num = args.target_length // args.eeg_patch_size
 
+    dataset_kwargs = {}
+    if args.dataset.lower() == "eegdenoisenet":
+        dataset_kwargs = {
+            "noise_types": args.noise_types,
+            "train_snr_range": (args.train_snr_min, args.train_snr_max),
+            "eval_snr_levels": args.eval_snr_levels,
+            "combin_num": args.combin_num,
+            "seed": args.seed,
+        }
+
     data_loader_dict, num_classes = build_dataloaders(
         dataset_name=args.dataset,
         datasets_dir=args.datasets_dir,
@@ -126,9 +133,11 @@ def main(args):
         num_workers=args.num_workers,
         transform=None,
         use_weighted_sampler=args.weighted_sampler,
+        dataset_kwargs=dataset_kwargs,
     )
     args.class_num = num_classes
     data_loader_train = data_loader_dict["train"]
+    data_loader_val = data_loader_dict["val"]
 
     model = Denoiser(args).to(device)
     n_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
@@ -175,11 +184,15 @@ def main(args):
             model, model, data_loader_train, optimizer, device, epoch,
             log_writer=log_writer, args=args,
         )
+        val_loss = evaluate(model, data_loader_val, device, epoch=epoch, log_writer=log_writer, args=args)
+        monitor_loss = val_loss if val_loss is not None else epoch_loss
 
-        if epoch_loss is not None and early_stop_enabled:
-            if epoch_loss + args.early_stop_min_delta < best_loss:
-                best_loss = epoch_loss
+        if monitor_loss is not None:
+            if monitor_loss + args.early_stop_min_delta < best_loss:
+                best_loss = monitor_loss
                 epochs_since_improvement = 0
+                misc.save_model(args=args, model_without_ddp=model, optimizer=optimizer,
+                                epoch=epoch, epoch_name="best")
             else:
                 epochs_since_improvement += 1
 

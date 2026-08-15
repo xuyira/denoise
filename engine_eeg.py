@@ -2,9 +2,16 @@ import math
 import sys
 
 import torch
+import contextlib
 
 import util.misc as misc
 import util.lr_sched as lr_sched
+
+
+def _autocast_context(device):
+    if device.type == "cuda":
+        return torch.amp.autocast("cuda", dtype=torch.bfloat16)
+    return contextlib.nullcontext()
 
 
 def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, epoch, log_writer=None, args=None):
@@ -19,14 +26,14 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
     if log_writer is not None:
         print('log_dir: {}'.format(log_writer.log_dir))
 
-    for data_iter_step, (x, labels) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
+    for data_iter_step, (noisy, clean) in enumerate(metric_logger.log_every(data_loader, print_freq, header)):
         lr_sched.adjust_learning_rate(optimizer, data_iter_step / len(data_loader) + epoch, args)
 
-        x = x.to(device, non_blocking=True).to(torch.float32)
-        labels = labels.to(device, non_blocking=True).long()
+        noisy = noisy.to(device, non_blocking=True).to(torch.float32)
+        clean = clean.to(device, non_blocking=True).to(torch.float32)
 
-        with torch.amp.autocast('cuda', dtype=torch.bfloat16):
-            loss = model(x, labels)
+        with _autocast_context(device):
+            loss = model(noisy, clean)
 
         loss_value = loss.item()
         if not math.isfinite(loss_value):
@@ -37,7 +44,8 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
         loss.backward()
         optimizer.step()
 
-        torch.cuda.synchronize()
+        if device.type == "cuda":
+            torch.cuda.synchronize()
 
         model_without_ddp.update_ema()
 
@@ -56,4 +64,28 @@ def train_one_epoch(model, model_without_ddp, data_loader, optimizer, device, ep
     metric_logger.synchronize_between_processes()
     print('Averaged stats:', metric_logger)
     avg_loss = metric_logger.meters['loss'].global_avg if 'loss' in metric_logger.meters else None
+    return avg_loss
+
+
+@torch.no_grad()
+def evaluate(model, data_loader, device, epoch=0, log_writer=None, args=None):
+    model.eval()
+    metric_logger = misc.MetricLogger(delimiter="  ")
+    header = "Val: [{}]".format(epoch)
+    print_freq = 20
+
+    for noisy, clean in metric_logger.log_every(data_loader, print_freq, header):
+        noisy = noisy.to(device, non_blocking=True).to(torch.float32)
+        clean = clean.to(device, non_blocking=True).to(torch.float32)
+
+        with _autocast_context(device):
+            loss = model(noisy, clean)
+
+        metric_logger.update(loss=loss.item())
+
+    metric_logger.synchronize_between_processes()
+    print("Validation stats:", metric_logger)
+    avg_loss = metric_logger.meters["loss"].global_avg if "loss" in metric_logger.meters else None
+    if log_writer is not None and avg_loss is not None:
+        log_writer.add_scalar("val_loss", misc.all_reduce_mean(avg_loss), epoch)
     return avg_loss
