@@ -28,6 +28,10 @@ class Denoiser(nn.Module):
         self.loss_weight_stat = getattr(args, "loss_weight_stat", 1.0)
         self.loss_weight_tv = getattr(args, "loss_weight_tv", 0.05)
         self.loss_weight_corr = getattr(args, "loss_weight_corr", 0.05)
+        self.prediction_target = getattr(args, "prediction_target", "velocity")
+        self.t_eps = getattr(args, "t_eps", 1e-5)
+        if self.prediction_target not in {"velocity", "clean"}:
+            raise ValueError("prediction_target must be 'velocity' or 'clean'.")
 
         self.ema_decay1 = args.ema_decay1
         self.ema_decay2 = args.ema_decay2
@@ -83,12 +87,20 @@ class Denoiser(nn.Module):
         z = (1 - t) * noisy + t * clean
         v = clean - noisy
 
-        v_pred = self.net(z, t.flatten())
-        clean_pred = z + (1 - t) * v_pred
+        net_out = self.net(z, t.flatten())
+        if self.prediction_target == "clean":
+            clean_pred = net_out
+            v_pred = (clean_pred - z) / (1 - t).clamp_min(self.t_eps)
+        else:
+            v_pred = net_out
+            clean_pred = z + (1 - t) * v_pred
 
         return self._compute_loss(v, v_pred, clean, clean_pred)
 
     def _compute_loss(self, v, v_pred, x, x_pred):
+        if self.prediction_target == "clean":
+            return self._compute_clean_loss(v, v_pred, x, x_pred)
+
         loss_l1 = (x - x_pred).abs().mean()
 
         if self.loss_type == "mix":
@@ -122,6 +134,44 @@ class Denoiser(nn.Module):
                 mix_loss = mix_loss + self.loss_weight_corr * self._pearson_corr_loss(x, x_pred)
 
             return mix_loss
+
+        if self.loss_type == "l1":
+            return (v - v_pred).abs().mean()
+        return ((v - v_pred) ** 2).mean()
+
+    def _compute_clean_loss(self, v, v_pred, x, x_pred):
+        loss_l1 = (x - x_pred).abs().mean()
+
+        if self.loss_type == "mix":
+            loss = loss_l1
+            if self.loss_weight_stft > 0:
+                fft_sizes = [64, 128, 256, 512, 1024]
+                hop_sizes = [16, 32, 64, 128, 256]
+                win_lengths = [64, 128, 256, 512, 1024]
+                signal_length = x.reshape(x.shape[0], x.shape[1], -1).shape[-1]
+                stft_configs = [
+                    (n_fft, hop, win)
+                    for n_fft, hop, win in zip(fft_sizes, hop_sizes, win_lengths)
+                    if n_fft <= signal_length
+                ]
+
+                loss_stft = x.new_tensor(0.0)
+                for n_fft, hop, win in stft_configs:
+                    loss_stft += self._stft_loss_multires(x, x_pred, n_fft, hop, win)
+                if stft_configs:
+                    loss_stft /= len(stft_configs)
+                    loss = loss + self.loss_weight_stft * loss_stft
+
+            if self.loss_weight_stat > 0:
+                loss = loss + self.loss_weight_stat * self._statistics_loss(x, x_pred)
+
+            if self.loss_weight_tv > 0:
+                loss = loss + self.loss_weight_tv * self._total_variation_loss(x_pred)
+
+            if self.loss_weight_corr > 0:
+                loss = loss + self.loss_weight_corr * self._pearson_corr_loss(x, x_pred)
+
+            return loss
 
         if self.loss_type == "l1":
             return (v - v_pred).abs().mean()
@@ -204,7 +254,11 @@ class Denoiser(nn.Module):
 
         def _get_v(z_in, t_scalar):
             t_vec = torch.full((b,), t_scalar, device=device)
-            return self._run_net(z_in, t_vec, use_ema=use_ema)
+            net_out = self._run_net(z_in, t_vec, use_ema=use_ema)
+            if self.prediction_target == "clean":
+                denom = max(1.0 - t_scalar, self.t_eps)
+                return (net_out - z_in) / denom
+            return net_out
 
         for i in range(steps):
             t_cur = float(t_schedule[i])

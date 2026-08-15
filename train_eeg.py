@@ -65,6 +65,10 @@ def get_args_parser():
     parser.add_argument("--loss_weight_stat", type=float, default=0.0)
     parser.add_argument("--loss_weight_tv", type=float, default=0.0)
     parser.add_argument("--loss_weight_corr", type=float, default=0.0)
+    parser.add_argument("--prediction_target", default="velocity", choices=["velocity", "clean"],
+                        help="Network target: direct flow velocity or final clean EEG.")
+    parser.add_argument("--t_eps", type=float, default=1e-5,
+                        help="Minimum denominator when converting clean prediction to velocity.")
 
     # sampling
     parser.add_argument("--sampling_method", default="heun", choices=["euler", "heun"])

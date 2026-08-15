@@ -49,6 +49,10 @@ def get_args_parser():
 
     parser.add_argument("--ema_decay1", type=float, default=0.9999)
     parser.add_argument("--ema_decay2", type=float, default=0.9996)
+    parser.add_argument("--prediction_target", default="velocity", choices=["velocity", "clean"],
+                        help="Network target used during training: direct velocity or final clean EEG.")
+    parser.add_argument("--t_eps", type=float, default=1e-5,
+                        help="Minimum denominator when converting clean prediction to velocity.")
 
     parser.add_argument("--sampling_method", default="heun", choices=["euler", "heun"])
     parser.add_argument("--num_sampling_steps", type=int, default=50)
@@ -201,6 +205,7 @@ def main(args):
         "sampling_rate": args.sampling_rate,
         "spectral_max_freq": args.spectral_max_freq,
         "ema_mode": args.ema_mode,
+        "prediction_target": args.prediction_target,
         "metrics": {name: summarize(values) for name, values in metrics.items()},
         "per_snr": summarize_grouped(per_snr),
         "per_noise_type": summarize_grouped(per_noise_type),
