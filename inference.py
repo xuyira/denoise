@@ -45,6 +45,10 @@ def get_args_parser():
     parser.add_argument("--gen_bsz", type=int, default=64)
     parser.add_argument("--num_samples", type=int, default=0,
                         help="0 evaluates the whole split.")
+    parser.add_argument("--sampling_rate", type=float, default=256.0,
+                        help="Sampling rate used for EEGdenoiseNet spectral metrics.")
+    parser.add_argument("--spectral_max_freq", type=float, default=120.0,
+                        help="Upper frequency bound for EEGdenoiseNet RRMSE_spectral.")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--device", default="cuda")
 
@@ -71,15 +75,24 @@ def _rrmse_time(pred: torch.Tensor, clean: torch.Tensor) -> torch.Tensor:
     return num / den
 
 
-def _rrmse_freq(pred: torch.Tensor, clean: torch.Tensor) -> torch.Tensor:
-    pred_mag = torch.fft.rfft(pred, dim=-1).abs()
-    clean_mag = torch.fft.rfft(clean, dim=-1).abs()
-    num = torch.sqrt(torch.mean((pred_mag - clean_mag) ** 2, dim=(-2, -1)))
-    den = torch.sqrt(torch.mean(clean_mag ** 2, dim=(-2, -1))).clamp_min(1e-8)
+def _rrmse_spectral(
+    pred: torch.Tensor,
+    clean: torch.Tensor,
+    sampling_rate: float,
+    max_freq: float,
+) -> torch.Tensor:
+    pred_psd = torch.fft.rfft(pred, dim=-1).abs().pow(2)
+    clean_psd = torch.fft.rfft(clean, dim=-1).abs().pow(2)
+    freqs = torch.fft.rfftfreq(pred.shape[-1], d=1.0 / sampling_rate)
+    freq_mask = freqs <= max_freq
+    pred_psd = pred_psd[..., freq_mask]
+    clean_psd = clean_psd[..., freq_mask]
+    num = torch.sqrt(torch.mean((pred_psd - clean_psd) ** 2, dim=(-2, -1)))
+    den = torch.sqrt(torch.mean(clean_psd ** 2, dim=(-2, -1))).clamp_min(1e-8)
     return num / den
 
 
-def _corr(pred: torch.Tensor, clean: torch.Tensor) -> torch.Tensor:
+def _cc(pred: torch.Tensor, clean: torch.Tensor) -> torch.Tensor:
     pred_f = pred.reshape(pred.shape[0], -1)
     clean_f = clean.reshape(clean.shape[0], -1)
     pred_c = pred_f - pred_f.mean(dim=1, keepdim=True)
@@ -97,10 +110,14 @@ def _summarize(values):
     }
 
 
-def _append_group_metrics(store, key, rrmse_time, rrmse_freq, corr):
-    store[key]["rrmse_time"].extend(rrmse_time)
-    store[key]["rrmse_freq"].extend(rrmse_freq)
-    store[key]["corr"].extend(corr)
+def _new_metric_store():
+    return {"RRMSE_temporal": [], "RRMSE_spectral": [], "CC": []}
+
+
+def _append_group_metrics(store, key, rrmse_temporal, rrmse_spectral, cc):
+    store[key]["RRMSE_temporal"].extend(rrmse_temporal)
+    store[key]["RRMSE_spectral"].extend(rrmse_spectral)
+    store[key]["CC"].extend(cc)
 
 
 def _summarize_grouped(grouped):
@@ -146,10 +163,10 @@ def main(args):
     print(f"Loaded weights from {ckpt_path}")
 
     noisy_chunks, clean_chunks, denoised_chunks = [], [], []
-    metrics = {"rrmse_time": [], "rrmse_freq": [], "corr": []}
-    per_snr = defaultdict(lambda: {"rrmse_time": [], "rrmse_freq": [], "corr": []})
-    per_noise_type = defaultdict(lambda: {"rrmse_time": [], "rrmse_freq": [], "corr": []})
-    per_noise_type_snr = defaultdict(lambda: {"rrmse_time": [], "rrmse_freq": [], "corr": []})
+    metrics = _new_metric_store()
+    per_snr = defaultdict(_new_metric_store)
+    per_noise_type = defaultdict(_new_metric_store)
+    per_noise_type_snr = defaultdict(_new_metric_store)
 
     for step, (noisy, clean, metadata) in enumerate(loader):
         noisy = noisy.to(device, non_blocking=True).float()
@@ -160,22 +177,45 @@ def main(args):
         clean_s = _to_signal(clean).cpu()
         denoised_s = _to_signal(denoised).cpu()
 
-        batch_rrmse_time = _rrmse_time(denoised_s, clean_s).tolist()
-        batch_rrmse_freq = _rrmse_freq(denoised_s, clean_s).tolist()
-        batch_corr = _corr(denoised_s, clean_s).tolist()
+        batch_rrmse_temporal = _rrmse_time(denoised_s, clean_s).tolist()
+        batch_rrmse_spectral = _rrmse_spectral(
+            denoised_s,
+            clean_s,
+            sampling_rate=args.sampling_rate,
+            max_freq=args.spectral_max_freq,
+        ).tolist()
+        batch_cc = _cc(denoised_s, clean_s).tolist()
 
-        metrics["rrmse_time"].extend(batch_rrmse_time)
-        metrics["rrmse_freq"].extend(batch_rrmse_freq)
-        metrics["corr"].extend(batch_corr)
+        metrics["RRMSE_temporal"].extend(batch_rrmse_temporal)
+        metrics["RRMSE_spectral"].extend(batch_rrmse_spectral)
+        metrics["CC"].extend(batch_cc)
 
         noise_types = metadata["noise_type"]
         snr_values = metadata["snr_db"].tolist()
         for i, (noise_type, snr_db) in enumerate(zip(noise_types, snr_values)):
             snr_key = f"{float(snr_db):g}"
             combo_key = f"{noise_type}_{snr_key}dB"
-            _append_group_metrics(per_snr, snr_key, [batch_rrmse_time[i]], [batch_rrmse_freq[i]], [batch_corr[i]])
-            _append_group_metrics(per_noise_type, noise_type, [batch_rrmse_time[i]], [batch_rrmse_freq[i]], [batch_corr[i]])
-            _append_group_metrics(per_noise_type_snr, combo_key, [batch_rrmse_time[i]], [batch_rrmse_freq[i]], [batch_corr[i]])
+            _append_group_metrics(
+                per_snr,
+                snr_key,
+                [batch_rrmse_temporal[i]],
+                [batch_rrmse_spectral[i]],
+                [batch_cc[i]],
+            )
+            _append_group_metrics(
+                per_noise_type,
+                noise_type,
+                [batch_rrmse_temporal[i]],
+                [batch_rrmse_spectral[i]],
+                [batch_cc[i]],
+            )
+            _append_group_metrics(
+                per_noise_type_snr,
+                combo_key,
+                [batch_rrmse_temporal[i]],
+                [batch_rrmse_spectral[i]],
+                [batch_cc[i]],
+            )
 
         noisy_chunks.append(noisy_s)
         clean_chunks.append(clean_s)
@@ -199,6 +239,8 @@ def main(args):
         "split": args.eval_split,
         "noise_types": args.noise_types,
         "eval_snr_levels": args.eval_snr_levels,
+        "sampling_rate": args.sampling_rate,
+        "spectral_max_freq": args.spectral_max_freq,
         "metrics": {name: _summarize(values) for name, values in metrics.items()},
         "per_snr": _summarize_grouped(per_snr),
         "per_noise_type": _summarize_grouped(per_noise_type),
