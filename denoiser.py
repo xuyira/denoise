@@ -98,12 +98,19 @@ class Denoiser(nn.Module):
                 fft_sizes = [64, 128, 256, 512, 1024]
                 hop_sizes = [16, 32, 64, 128, 256]
                 win_lengths = [64, 128, 256, 512, 1024]
+                signal_length = x.reshape(x.shape[0], x.shape[1], -1).shape[-1]
+                stft_configs = [
+                    (n_fft, hop, win)
+                    for n_fft, hop, win in zip(fft_sizes, hop_sizes, win_lengths)
+                    if n_fft <= signal_length
+                ]
 
-                loss_stft = 0.0
-                for n_fft, hop, win in zip(fft_sizes, hop_sizes, win_lengths):
+                loss_stft = x.new_tensor(0.0)
+                for n_fft, hop, win in stft_configs:
                     loss_stft += self._stft_loss_multires(x, x_pred, n_fft, hop, win)
-                loss_stft /= len(fft_sizes)
-                mix_loss = mix_loss + self.loss_weight_stft * loss_stft
+                if stft_configs:
+                    loss_stft /= len(stft_configs)
+                    mix_loss = mix_loss + self.loss_weight_stft * loss_stft
 
             if self.loss_weight_stat > 0:
                 mix_loss = mix_loss + self.loss_weight_stat * self._statistics_loss(x, x_pred)
