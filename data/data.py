@@ -75,7 +75,12 @@ class TransformedDataset(Dataset):
         return len(self.base_dataset)
 
     def __getitem__(self, idx):
-        data, target = self.base_dataset[idx]
+        sample = self.base_dataset[idx]
+        if isinstance(sample, tuple) and len(sample) == 3:
+            data, target, metadata = sample
+        else:
+            data, target = sample
+            metadata = None
         data = torch.as_tensor(data, dtype=torch.float32)
         if self.task == "denoising":
             target = torch.as_tensor(target, dtype=torch.float32)
@@ -83,6 +88,8 @@ class TransformedDataset(Dataset):
             target = torch.tensor(int(target), dtype=torch.long)
         if self.transform is not None:
             data = self.transform(data)
+        if metadata is not None:
+            return data, target, metadata
         return data, target
 
 
