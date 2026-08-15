@@ -152,21 +152,21 @@ def main(args):
         for i, (noise_type, snr_db) in enumerate(zip(noise_types, snr_values)):
             snr_key = f"{float(snr_db):g}"
             combo_key = f"{noise_type}_{snr_key}dB"
-            _append_group_metrics(
+            append_group_metrics(
                 per_snr,
                 snr_key,
                 [batch_rrmse_temporal[i]],
                 [batch_rrmse_spectral[i]],
                 [batch_cc[i]],
             )
-            _append_group_metrics(
+            append_group_metrics(
                 per_noise_type,
                 noise_type,
                 [batch_rrmse_temporal[i]],
                 [batch_rrmse_spectral[i]],
                 [batch_cc[i]],
             )
-            _append_group_metrics(
+            append_group_metrics(
                 per_noise_type_snr,
                 combo_key,
                 [batch_rrmse_temporal[i]],
