@@ -65,6 +65,8 @@ def get_args_parser():
     parser.add_argument("--loss_weight_stat", type=float, default=0.0)
     parser.add_argument("--loss_weight_tv", type=float, default=0.0)
     parser.add_argument("--loss_weight_corr", type=float, default=0.0)
+    parser.add_argument("--loss_weight_velocity", type=float, default=0.0,
+                        help="Auxiliary velocity MSE weight for clean-target mix loss.")
     parser.add_argument("--prediction_target", default="velocity", choices=["velocity", "clean"],
                         help="Network target: direct flow velocity or final clean EEG.")
     parser.add_argument("--clean_output", default="direct", choices=["direct", "residual"],

@@ -49,6 +49,8 @@ def get_args_parser():
 
     parser.add_argument("--ema_decay1", type=float, default=0.9999)
     parser.add_argument("--ema_decay2", type=float, default=0.9996)
+    parser.add_argument("--loss_weight_velocity", type=float, default=0.0,
+                        help="Recorded for clean-target mix experiments; unused during inference.")
     parser.add_argument("--prediction_target", default="velocity", choices=["velocity", "clean"],
                         help="Network target used during training: direct velocity or final clean EEG.")
     parser.add_argument("--clean_output", default="direct", choices=["direct", "residual"],
@@ -128,6 +130,16 @@ def main(args):
     model.ema_params1 = [ckpt["model_ema1"][n].to(device) for n, _ in model.named_parameters()]
     model.ema_params2 = [ckpt["model_ema2"][n].to(device) for n, _ in model.named_parameters()]
     print(f"Loaded weights from {ckpt_path}")
+    print(
+        "Inference config: "
+        f"noise_types={args.noise_types}, "
+        f"prediction_target={args.prediction_target}, "
+        f"clean_output={args.clean_output}, "
+        f"denoise_mode={args.denoise_mode}, "
+        f"ema_mode={args.ema_mode}, "
+        f"sampling_method={args.sampling_method}, "
+        f"num_sampling_steps={args.num_sampling_steps}"
+    )
 
     noisy_chunks, clean_chunks, denoised_chunks = [], [], []
     metrics = new_metric_store()
@@ -212,6 +224,7 @@ def main(args):
         "prediction_target": args.prediction_target,
         "clean_output": args.clean_output,
         "denoise_mode": args.denoise_mode,
+        "loss_weight_velocity": args.loss_weight_velocity,
         "metrics": {name: summarize(values) for name, values in metrics.items()},
         "per_snr": summarize_grouped(per_snr),
         "per_noise_type": summarize_grouped(per_noise_type),

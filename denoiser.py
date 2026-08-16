@@ -28,6 +28,7 @@ class Denoiser(nn.Module):
         self.loss_weight_stat = getattr(args, "loss_weight_stat", 1.0)
         self.loss_weight_tv = getattr(args, "loss_weight_tv", 0.05)
         self.loss_weight_corr = getattr(args, "loss_weight_corr", 0.05)
+        self.loss_weight_velocity = getattr(args, "loss_weight_velocity", 0.0)
         self.prediction_target = getattr(args, "prediction_target", "velocity")
         self.clean_output = getattr(args, "clean_output", "direct")
         self.denoise_mode = getattr(args, "denoise_mode", "ode")
@@ -150,6 +151,9 @@ class Denoiser(nn.Module):
 
         if self.loss_type == "mix":
             loss = loss_l1
+            if self.loss_weight_velocity > 0:
+                loss = loss + self.loss_weight_velocity * ((v - v_pred) ** 2).mean()
+
             if self.loss_weight_stft > 0:
                 fft_sizes = [64, 128, 256, 512, 1024]
                 hop_sizes = [16, 32, 64, 128, 256]
