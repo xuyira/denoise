@@ -2,8 +2,8 @@
 set -euo pipefail
 
 DATASETS_DIR="${1:-../EEGdenoiseNet/data}"
-CKPT="${2:-./output/eegdenoisenet_clean_patch16_emg}"
-OUTPUT_ROOT="${3:-./output/eegdenoisenet_clean_patch16_eval}"
+CKPT="${2:-./output/eegdenoisenet_clean_conv_patch16_emg}"
+OUTPUT_ROOT="${3:-./output/eegdenoisenet_clean_conv_patch16_eval}"
 NOISE_TYPE="${4:-emg}"
 EMA_MODE="${5:-raw}"
 DENOISE_MODE="${6:-direct}"
@@ -19,6 +19,9 @@ python inference.py \
   --num_eeg_channels 1 \
   --target_length 512 \
   --eeg_patch_size 16 \
+  --conv_refiner \
+  --conv_refiner_channels 64 \
+  --conv_refiner_kernel 3 \
   --prediction_target clean \
   --denoise_mode "$DENOISE_MODE" \
   --gen_bsz 64 \

@@ -30,6 +30,10 @@ def get_args_parser():
     parser.add_argument("--attn_dropout", type=float, default=0.0)
     parser.add_argument("--proj_dropout", type=float, default=0.0)
     parser.add_argument("--eeg_patch_size", type=int, default=64)
+    parser.add_argument("--conv_refiner", action="store_true",
+                        help="Add an EEGDfus-style Conv1D residual refiner after clean prediction.")
+    parser.add_argument("--conv_refiner_channels", type=int, default=64)
+    parser.add_argument("--conv_refiner_kernel", type=int, default=3)
 
     # dataset
     parser.add_argument("--dataset", default="eegdenoisenet", choices=["eegdenoisenet"])
