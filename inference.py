@@ -40,6 +40,9 @@ def get_args_parser():
     parser.add_argument("--target_length", type=int, default=512)
     parser.add_argument("--attn_dropout", type=float, default=0.0)
     parser.add_argument("--proj_dropout", type=float, default=0.0)
+    parser.add_argument("--use_convffn", action="store_true",
+                        help="Use the ConvFFN architecture variant when loading matching checkpoints.")
+    parser.add_argument("--convffn_kernel_size", type=int, default=3)
 
     parser.add_argument("--noise_types", nargs="+", default=["eog", "emg"], choices=["eog", "emg"])
     parser.add_argument("--train_snr_min", type=float, default=None)

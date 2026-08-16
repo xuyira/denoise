@@ -30,6 +30,9 @@ def get_args_parser():
     parser.add_argument("--attn_dropout", type=float, default=0.0)
     parser.add_argument("--proj_dropout", type=float, default=0.0)
     parser.add_argument("--eeg_patch_size", type=int, default=64)
+    parser.add_argument("--use_convffn", action="store_true",
+                        help="Replace the block MLP with a depthwise Conv1d FFN over patch tokens.")
+    parser.add_argument("--convffn_kernel_size", type=int, default=3)
 
     # dataset
     parser.add_argument("--dataset", default="eegdenoisenet", choices=["eegdenoisenet"])

@@ -17,20 +17,61 @@ def _modulate(x: torch.Tensor, shift: torch.Tensor, scale: torch.Tensor) -> torc
     return x * (1 + scale) + shift
 
 
+class ConvFFN(nn.Module):
+    def __init__(self, hidden_size: int, mlp_hidden: int, proj_drop: float, kernel_size: int):
+        super().__init__()
+        if kernel_size % 2 == 0:
+            raise ValueError("convffn_kernel_size must be odd so the token length is preserved")
+        self.fc1 = nn.Linear(hidden_size, mlp_hidden)
+        self.act = nn.GELU()
+        self.drop1 = nn.Dropout(proj_drop)
+        self.dwconv = nn.Conv1d(
+            mlp_hidden,
+            mlp_hidden,
+            kernel_size=kernel_size,
+            padding=kernel_size // 2,
+            groups=mlp_hidden,
+        )
+        self.fc2 = nn.Linear(mlp_hidden, hidden_size)
+        self.drop2 = nn.Dropout(proj_drop)
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        x = self.fc1(x)
+        x = self.act(x)
+        x = self.drop1(x)
+        x = self.dwconv(x.transpose(1, 2)).transpose(1, 2)
+        x = self.act(x)
+        x = self.fc2(x)
+        x = self.drop2(x)
+        return x
+
+
 class RawViTBlock(nn.Module):
-    def __init__(self, hidden_size: int, num_heads: int, mlp_ratio: float, attn_drop: float, proj_drop: float):
+    def __init__(
+        self,
+        hidden_size: int,
+        num_heads: int,
+        mlp_ratio: float,
+        attn_drop: float,
+        proj_drop: float,
+        use_convffn: bool = False,
+        convffn_kernel_size: int = 3,
+    ):
         super().__init__()
         self.norm1 = nn.LayerNorm(hidden_size)
         self.attn = nn.MultiheadAttention(hidden_size, num_heads, dropout=attn_drop, batch_first=True)
         self.norm2 = nn.LayerNorm(hidden_size)
         mlp_hidden = int(hidden_size * mlp_ratio)
-        self.mlp = nn.Sequential(
-            nn.Linear(hidden_size, mlp_hidden),
-            nn.GELU(),
-            nn.Dropout(proj_drop),
-            nn.Linear(mlp_hidden, hidden_size),
-            nn.Dropout(proj_drop),
-        )
+        if use_convffn:
+            self.mlp = ConvFFN(hidden_size, mlp_hidden, proj_drop, convffn_kernel_size)
+        else:
+            self.mlp = nn.Sequential(
+                nn.Linear(hidden_size, mlp_hidden),
+                nn.GELU(),
+                nn.Dropout(proj_drop),
+                nn.Linear(mlp_hidden, hidden_size),
+                nn.Dropout(proj_drop),
+            )
         self.adaLN_modulation = nn.Sequential(
             nn.SiLU(),
             nn.Linear(hidden_size, 6 * hidden_size, bias=True),
@@ -96,6 +137,8 @@ class RawViTDiffusion(nn.Module):
         target_length: int,
         attn_dropout: float = 0.0,
         proj_dropout: float = 0.0,
+        use_convffn: bool = False,
+        convffn_kernel_size: int = 3,
     ):
         super().__init__()
         if target_length % patch_size != 0:
@@ -125,6 +168,8 @@ class RawViTDiffusion(nn.Module):
                 mlp_ratio=spec.mlp_ratio,
                 attn_drop=attn_dropout,
                 proj_drop=proj_dropout,
+                use_convffn=use_convffn,
+                convffn_kernel_size=convffn_kernel_size,
             )
             for _ in range(spec.depth)
         ])
@@ -136,6 +181,10 @@ class RawViTDiffusion(nn.Module):
     def _init_weights(m: nn.Module):
         if isinstance(m, nn.Linear):
             nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0.0)
+        elif isinstance(m, nn.Conv1d):
+            nn.init.kaiming_normal_(m.weight, nonlinearity="linear")
             if m.bias is not None:
                 nn.init.constant_(m.bias, 0.0)
 

@@ -15,6 +15,8 @@ class Denoiser(nn.Module):
             target_length=args.target_length,
             attn_dropout=args.attn_dropout,
             proj_dropout=args.proj_dropout,
+            use_convffn=getattr(args, "use_convffn", False),
+            convffn_kernel_size=getattr(args, "convffn_kernel_size", 3),
         )
         self.sample_shape = (args.num_eeg_channels, args.eeg_patch_num, args.eeg_patch_size)
         self.raw_vit_num_channels = args.num_eeg_channels
