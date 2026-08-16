@@ -2,9 +2,29 @@
 set -euo pipefail
 
 DATASETS_DIR="${1:-../EEGdenoiseNet/data}"
-OUTPUT_ROOT="${2:-./output/eegdenoisenet_clean_conv_cond_patch16}"
+OUTPUT_ROOT="${2:-./output/eegdenoisenet_clean_patch16}"
 NOISE_TYPE="${3:-emg}"
-OUTPUT_DIR="${OUTPUT_ROOT}_${NOISE_TYPE}"
+VARIANT="${4:-none}"
+OUTPUT_DIR="${OUTPUT_ROOT}_${VARIANT}_${NOISE_TYPE}"
+
+EXTRA_ARGS=()
+if [[ "$VARIANT" == "conv" ]]; then
+  EXTRA_ARGS=(
+    --conv_refiner
+    --conv_refiner_channels 64
+    --conv_refiner_kernel 3
+  )
+elif [[ "$VARIANT" == "cond" ]]; then
+  EXTRA_ARGS=(
+    --conv_refiner
+    --conv_refiner_channels 64
+    --conv_refiner_kernel 3
+    --condition_mode refiner
+  )
+elif [[ "$VARIANT" != "none" ]]; then
+  echo "VARIANT must be 'none', 'conv', or 'cond', got '$VARIANT'" >&2
+  exit 1
+fi
 
 python train_eeg.py \
   --dataset eegdenoisenet \
@@ -15,10 +35,6 @@ python train_eeg.py \
   --num_eeg_channels 1 \
   --target_length 512 \
   --eeg_patch_size 16 \
-  --conv_refiner \
-  --conv_refiner_channels 64 \
-  --conv_refiner_kernel 3 \
-  --condition_mode refiner \
   --batch_size 128 \
   --epochs 200 \
   --blr 5e-5 \
@@ -30,4 +46,5 @@ python train_eeg.py \
   --loss_weight_stat 0 \
   --loss_weight_tv 0 \
   --num_sampling_steps 50 \
-  --sampling_method heun
+  --sampling_method heun \
+  "${EXTRA_ARGS[@]}"
