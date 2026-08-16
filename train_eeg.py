@@ -30,6 +30,8 @@ def get_args_parser():
     parser.add_argument("--attn_dropout", type=float, default=0.0)
     parser.add_argument("--proj_dropout", type=float, default=0.0)
     parser.add_argument("--eeg_patch_size", type=int, default=64)
+    parser.add_argument("--dual_branch", action="store_true",
+                        help="Use an EEGDfus-style dual-branch backbone with noisy EEG as condition.")
 
     # dataset
     parser.add_argument("--dataset", default="eegdenoisenet", choices=["eegdenoisenet"])

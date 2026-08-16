@@ -2,13 +2,15 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-from models.raw_vit import RawViTDiffusion
+from models.raw_vit import ConditionalRawViTDiffusion, RawViTDiffusion
 
 
 class Denoiser(nn.Module):
     def __init__(self, args):
         super().__init__()
-        self.net = RawViTDiffusion(
+        self.dual_branch = getattr(args, "dual_branch", False)
+        backbone = ConditionalRawViTDiffusion if self.dual_branch else RawViTDiffusion
+        self.net = backbone(
             model_name=args.model,
             num_channels=args.num_eeg_channels,
             patch_size=args.eeg_patch_size,
@@ -39,6 +41,8 @@ class Denoiser(nn.Module):
             raise ValueError("clean_output must be 'direct' or 'residual'.")
         if self.denoise_mode not in {"ode", "direct"}:
             raise ValueError("denoise_mode must be 'ode' or 'direct'.")
+        if self.dual_branch and self.prediction_target != "clean":
+            raise ValueError("dual_branch currently supports prediction_target='clean' only.")
 
         self.ema_decay1 = args.ema_decay1
         self.ema_decay2 = args.ema_decay2
@@ -95,7 +99,7 @@ class Denoiser(nn.Module):
         v = clean - noisy
 
         if self.prediction_target == "clean":
-            clean_pred = self._clean_pred_from_net(z, t.flatten())
+            clean_pred = self._clean_pred_from_net(z, t.flatten(), condition=noisy)
             v_pred = (clean_pred - z) / (1 - t).clamp_min(self.t_eps)
         else:
             net_out = self.net(z, t.flatten())
@@ -104,8 +108,15 @@ class Denoiser(nn.Module):
 
         return self._compute_loss(v, v_pred, clean, clean_pred)
 
-    def _clean_pred_from_net(self, z: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
-        net_out = self.net(z, t)
+    def _net_forward(self, z: torch.Tensor, t: torch.Tensor, condition: torch.Tensor = None) -> torch.Tensor:
+        if self.dual_branch:
+            if condition is None:
+                raise ValueError("dual_branch model requires a noisy EEG condition.")
+            return self.net(z, t, condition)
+        return self.net(z, t)
+
+    def _clean_pred_from_net(self, z: torch.Tensor, t: torch.Tensor, condition: torch.Tensor = None) -> torch.Tensor:
+        net_out = self._net_forward(z, t, condition=condition)
         return z + net_out if self.clean_output == "residual" else net_out
 
     def _compute_loss(self, v, v_pred, x, x_pred):
@@ -257,9 +268,9 @@ class Denoiser(nn.Module):
         return out
 
     @torch.no_grad()
-    def _run_clean_pred(self, z, t, use_ema=True):
+    def _run_clean_pred(self, z, t, use_ema=True, condition=None):
         if use_ema is False or use_ema == "raw":
-            return self._clean_pred_from_net(z, t)
+            return self._clean_pred_from_net(z, t, condition=condition)
 
         backup = [p.detach().clone() for p in self.parameters()]
         if use_ema == "ema2":
@@ -269,7 +280,7 @@ class Denoiser(nn.Module):
         for p, p_ema in zip(self.parameters(), ema):
             p.data.copy_(p_ema)
 
-        out = self._clean_pred_from_net(z, t)
+        out = self._clean_pred_from_net(z, t, condition=condition)
 
         for p, old in zip(self.parameters(), backup):
             p.data.copy_(old)
@@ -278,12 +289,13 @@ class Denoiser(nn.Module):
     @torch.no_grad()
     def denoise(self, noisy, use_ema=True):
         z = self.to_training_space(noisy)
+        condition = z
         b = z.shape[0]
         device = z.device
 
         if self.prediction_target == "clean" and self.denoise_mode == "direct":
             t_vec = torch.zeros((b,), device=device)
-            return self._run_clean_pred(z, t_vec, use_ema=use_ema)
+            return self._run_clean_pred(z, t_vec, use_ema=use_ema, condition=condition)
 
         steps = self.steps
         use_heun = self.method == "heun"
@@ -292,7 +304,7 @@ class Denoiser(nn.Module):
         def _get_v(z_in, t_scalar):
             t_vec = torch.full((b,), t_scalar, device=device)
             if self.prediction_target == "clean":
-                clean_pred = self._run_clean_pred(z_in, t_vec, use_ema=use_ema)
+                clean_pred = self._run_clean_pred(z_in, t_vec, use_ema=use_ema, condition=condition)
                 denom = max(1.0 - t_scalar, self.t_eps)
                 return (clean_pred - z_in) / denom
             net_out = self._run_net(z_in, t_vec, use_ema=use_ema)

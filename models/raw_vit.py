@@ -163,4 +163,105 @@ class RawViTDiffusion(nn.Module):
         return feats
 
 
-__all__ = ['RawViTDiffusion', 'RAW_VIT_SPECS']
+class ConditionalRawViTDiffusion(nn.Module):
+    """Dual-branch ViT backbone with a fixed noisy EEG condition branch."""
+
+    def __init__(
+        self,
+        model_name: str,
+        num_channels: int,
+        patch_size: int,
+        target_length: int,
+        attn_dropout: float = 0.0,
+        proj_dropout: float = 0.0,
+    ):
+        super().__init__()
+        if target_length % patch_size != 0:
+            raise ValueError("target_length must be divisible by patch_size for raw ViT mode")
+        if model_name not in RAW_VIT_SPECS:
+            raise ValueError(f"Unsupported model '{model_name}' for raw ViT mode. Available: {sorted(RAW_VIT_SPECS)}")
+        spec = RAW_VIT_SPECS[model_name]
+
+        self.num_channels = num_channels
+        self.patch_size = patch_size
+        self.target_length = target_length
+        self.patch_num = target_length // patch_size
+        self.hidden_size = spec.hidden_size
+        self.output_shape = (num_channels, self.patch_num, patch_size)
+
+        self.t_embedder = TimestepEmbedder(self.hidden_size)
+
+        self.state_patch_embed = nn.Linear(patch_size, self.hidden_size)
+        self.condition_patch_embed = nn.Linear(patch_size, self.hidden_size)
+        positions = np.arange(self.patch_num, dtype=np.float32)
+        pos_embed = get_1d_sincos_pos_embed_from_grid(self.hidden_size, positions)
+        self.pos_embed = nn.Parameter(torch.from_numpy(pos_embed).float().unsqueeze(0), requires_grad=False)
+
+        self.state_blocks = nn.ModuleList([
+            RawViTBlock(
+                hidden_size=self.hidden_size,
+                num_heads=spec.num_heads,
+                mlp_ratio=spec.mlp_ratio,
+                attn_drop=attn_dropout,
+                proj_drop=proj_dropout,
+            )
+            for _ in range(spec.depth)
+        ])
+        self.condition_blocks = nn.ModuleList([
+            RawViTBlock(
+                hidden_size=self.hidden_size,
+                num_heads=spec.num_heads,
+                mlp_ratio=spec.mlp_ratio,
+                attn_drop=attn_dropout,
+                proj_drop=proj_dropout,
+            )
+            for _ in range(spec.depth)
+        ])
+        self.fusion_layers = nn.ModuleList([
+            nn.Sequential(
+                nn.LayerNorm(self.hidden_size),
+                nn.Linear(self.hidden_size, self.hidden_size),
+            )
+            for _ in range(spec.depth)
+        ])
+        self.final_layer = RawFinalLayer(self.hidden_size, patch_size)
+
+        self.apply(self._init_weights)
+
+    @staticmethod
+    def _init_weights(m: nn.Module):
+        if isinstance(m, nn.Linear):
+            nn.init.xavier_uniform_(m.weight)
+            if m.bias is not None:
+                nn.init.constant_(m.bias, 0.0)
+
+    def forward(self, x: torch.Tensor, t: torch.Tensor, condition: torch.Tensor) -> torch.Tensor:
+        if x.dim() != 4 or condition.dim() != 4:
+            raise ValueError("ConditionalRawViTDiffusion expects x and condition with shape (B, C, patches, patch_size)")
+        if x.shape != condition.shape:
+            raise ValueError("x and condition must have the same shape")
+        bsz, channels, patch_num, patch_size = x.shape
+        if channels != self.num_channels:
+            raise ValueError(f"Expected {self.num_channels} channels but received {channels}")
+        if patch_num != self.patch_num or patch_size != self.patch_size:
+            raise ValueError("Input patch dimensions do not match the configured target length/patch size")
+
+        cond = self.t_embedder(t)
+        cond = cond.repeat_interleave(channels, dim=0)
+
+        state_feats = self.state_patch_embed(x)
+        condition_feats = self.condition_patch_embed(condition)
+        state_feats = state_feats.view(bsz * channels, patch_num, self.hidden_size) + self.pos_embed
+        condition_feats = condition_feats.view(bsz * channels, patch_num, self.hidden_size) + self.pos_embed
+
+        for state_block, condition_block, fusion in zip(self.state_blocks, self.condition_blocks, self.fusion_layers):
+            state_feats = state_block(state_feats, cond)
+            condition_feats = condition_block(condition_feats, cond)
+            condition_feats = condition_feats + fusion(state_feats)
+
+        feats = self.final_layer(condition_feats, cond)
+        feats = feats.view(bsz, channels, patch_num, patch_size)
+        return feats
+
+
+__all__ = ['RawViTDiffusion', 'ConditionalRawViTDiffusion', 'RAW_VIT_SPECS']
