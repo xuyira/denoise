@@ -67,6 +67,10 @@ def get_args_parser():
     parser.add_argument("--loss_weight_corr", type=float, default=0.0)
     parser.add_argument("--prediction_target", default="velocity", choices=["velocity", "clean"],
                         help="Network target: direct flow velocity or final clean EEG.")
+    parser.add_argument("--clean_output", default="direct", choices=["direct", "residual"],
+                        help="For clean target, predict clean EEG directly or a residual correction from z_t.")
+    parser.add_argument("--denoise_mode", default="ode", choices=["ode", "direct"],
+                        help="Denoising mode used by validation/inference for clean-target models.")
     parser.add_argument("--t_eps", type=float, default=1e-5,
                         help="Minimum denominator when converting clean prediction to velocity.")
 

@@ -2,8 +2,8 @@
 set -euo pipefail
 
 DATASETS_DIR="${1:-../EEGdenoiseNet/data}"
-CKPT="${2:-./output/eegdenoisenet_clean_patch16_emg}"
-OUTPUT_ROOT="${3:-./output/eegdenoisenet_clean_patch16_eval}"
+CKPT="${2:-./output/eegdenoisenet_clean_mix_patch16_emg}"
+OUTPUT_ROOT="${3:-./output/eegdenoisenet_clean_mix_patch16_eval}"
 NOISE_TYPE="${4:-emg}"
 EMA_MODE="${5:-raw}"
 DENOISE_MODE="${6:-ode}"

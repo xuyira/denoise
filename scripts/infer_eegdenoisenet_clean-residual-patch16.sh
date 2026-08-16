@@ -2,11 +2,11 @@
 set -euo pipefail
 
 DATASETS_DIR="${1:-../EEGdenoiseNet/data}"
-CKPT="${2:-./output/eegdenoisenet_clean_patch16_emg}"
-OUTPUT_ROOT="${3:-./output/eegdenoisenet_clean_patch16_eval}"
+CKPT="${2:-./output/eegdenoisenet_clean_residual_patch16_emg}"
+OUTPUT_ROOT="${3:-./output/eegdenoisenet_clean_residual_patch16_eval}"
 NOISE_TYPE="${4:-emg}"
 EMA_MODE="${5:-raw}"
-DENOISE_MODE="${6:-ode}"
+DENOISE_MODE="${6:-direct}"
 OUTPUT_DIR="${OUTPUT_ROOT}_${NOISE_TYPE}_${EMA_MODE}_${DENOISE_MODE}"
 
 python inference.py \
@@ -20,6 +20,7 @@ python inference.py \
   --target_length 512 \
   --eeg_patch_size 16 \
   --prediction_target clean \
+  --clean_output residual \
   --denoise_mode "$DENOISE_MODE" \
   --gen_bsz 64 \
   --ema_mode "$EMA_MODE" \

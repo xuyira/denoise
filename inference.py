@@ -51,6 +51,10 @@ def get_args_parser():
     parser.add_argument("--ema_decay2", type=float, default=0.9996)
     parser.add_argument("--prediction_target", default="velocity", choices=["velocity", "clean"],
                         help="Network target used during training: direct velocity or final clean EEG.")
+    parser.add_argument("--clean_output", default="direct", choices=["direct", "residual"],
+                        help="For clean target, predict clean EEG directly or a residual correction from z_t.")
+    parser.add_argument("--denoise_mode", default="ode", choices=["ode", "direct"],
+                        help="Use iterative ODE denoising or one-step direct clean prediction.")
     parser.add_argument("--t_eps", type=float, default=1e-5,
                         help="Minimum denominator when converting clean prediction to velocity.")
 
@@ -206,6 +210,8 @@ def main(args):
         "spectral_max_freq": args.spectral_max_freq,
         "ema_mode": args.ema_mode,
         "prediction_target": args.prediction_target,
+        "clean_output": args.clean_output,
+        "denoise_mode": args.denoise_mode,
         "metrics": {name: summarize(values) for name, values in metrics.items()},
         "per_snr": summarize_grouped(per_snr),
         "per_noise_type": summarize_grouped(per_noise_type),

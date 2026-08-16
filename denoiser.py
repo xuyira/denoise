@@ -29,9 +29,15 @@ class Denoiser(nn.Module):
         self.loss_weight_tv = getattr(args, "loss_weight_tv", 0.05)
         self.loss_weight_corr = getattr(args, "loss_weight_corr", 0.05)
         self.prediction_target = getattr(args, "prediction_target", "velocity")
+        self.clean_output = getattr(args, "clean_output", "direct")
+        self.denoise_mode = getattr(args, "denoise_mode", "ode")
         self.t_eps = getattr(args, "t_eps", 1e-5)
         if self.prediction_target not in {"velocity", "clean"}:
             raise ValueError("prediction_target must be 'velocity' or 'clean'.")
+        if self.clean_output not in {"direct", "residual"}:
+            raise ValueError("clean_output must be 'direct' or 'residual'.")
+        if self.denoise_mode not in {"ode", "direct"}:
+            raise ValueError("denoise_mode must be 'ode' or 'direct'.")
 
         self.ema_decay1 = args.ema_decay1
         self.ema_decay2 = args.ema_decay2
@@ -89,7 +95,7 @@ class Denoiser(nn.Module):
 
         net_out = self.net(z, t.flatten())
         if self.prediction_target == "clean":
-            clean_pred = net_out
+            clean_pred = z + net_out if self.clean_output == "residual" else net_out
             v_pred = (clean_pred - z) / (1 - t).clamp_min(self.t_eps)
         else:
             v_pred = net_out
@@ -248,6 +254,11 @@ class Denoiser(nn.Module):
         b = z.shape[0]
         device = z.device
 
+        if self.prediction_target == "clean" and self.denoise_mode == "direct":
+            t_vec = torch.zeros((b,), device=device)
+            net_out = self._run_net(z, t_vec, use_ema=use_ema)
+            return z + net_out if self.clean_output == "residual" else net_out
+
         steps = self.steps
         use_heun = self.method == "heun"
         t_schedule = torch.linspace(0.0, 1.0, steps + 1, device=device)
@@ -256,8 +267,9 @@ class Denoiser(nn.Module):
             t_vec = torch.full((b,), t_scalar, device=device)
             net_out = self._run_net(z_in, t_vec, use_ema=use_ema)
             if self.prediction_target == "clean":
+                clean_pred = z_in + net_out if self.clean_output == "residual" else net_out
                 denom = max(1.0 - t_scalar, self.t_eps)
-                return (net_out - z_in) / denom
+                return (clean_pred - z_in) / denom
             return net_out
 
         for i in range(steps):
