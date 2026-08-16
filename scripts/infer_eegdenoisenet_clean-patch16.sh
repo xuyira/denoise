@@ -6,7 +6,7 @@ CKPT="${2:-./output/eegdenoisenet_clean_patch16_emg}"
 OUTPUT_ROOT="${3:-./output/eegdenoisenet_clean_patch16_eval}"
 NOISE_TYPE="${4:-emg}"
 EMA_MODE="${5:-raw}"
-DENOISE_MODE="${6:-ode}"
+DENOISE_MODE="${6:-direct}"
 OUTPUT_DIR="${OUTPUT_ROOT}_${NOISE_TYPE}_${EMA_MODE}_${DENOISE_MODE}"
 
 python inference.py \

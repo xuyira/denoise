@@ -6,15 +6,38 @@ import torch
 from torch.utils.data import Dataset
 
 
-_SPLIT_RATIOS = {"train": 0.8, "val": 0.1, "test": 0.1}
+_SPLIT_RATIOS = {"train": 0.72, "val": 0.18, "test": 0.10}
 _SNR_RANGES = {
-    "eog": (-7.0, 2.0),
-    "emg": (-7.0, 4.0),
+    "eog": (-5.0, 5.0),
+    "emg": (-5.0, 5.0),
 }
 
 
 def _rms(x: np.ndarray) -> float:
     return float(np.sqrt(np.mean(np.square(x), dtype=np.float64)))
+
+
+def _standardize(x: np.ndarray) -> np.ndarray:
+    x = np.asarray(x, dtype=np.float32)
+    mean = float(np.mean(x))
+    std = float(np.std(x))
+    if std < 1e-8:
+        return x - mean
+    return (x - mean) / std
+
+
+def _permute_rows(x: np.ndarray, seed: int) -> np.ndarray:
+    rng = np.random.default_rng(seed)
+    return np.asarray(x)[rng.permutation(len(x))]
+
+
+def _balance_clean_to_noise(clean: np.ndarray, noise_len: int) -> np.ndarray:
+    if len(clean) == noise_len:
+        return np.asarray(clean)
+    if len(clean) > noise_len:
+        return np.asarray(clean[:noise_len])
+    reuse_num = noise_len - len(clean)
+    return np.vstack([clean[:reuse_num], clean])
 
 
 def _split_indices(n: int, split: str, seed: int) -> np.ndarray:
@@ -51,9 +74,9 @@ class EEGDenoiseNetDataset(Dataset):
         data_dir,
         split: str = "train",
         noise_types: Sequence[str] = ("eog", "emg"),
-        train_snr_range=(-7.0, 2.0),
-        eval_snr_levels: Iterable[float] = tuple(range(-7, 3)),
-        combin_num: int = 10,
+        train_snr_range=(-5.0, 5.0),
+        eval_snr_levels: Iterable[float] = tuple(range(-5, 6)),
+        combin_num: int = 11,
         seed: int = 0,
         normalize: bool = True,
         return_metadata: bool = False,
@@ -75,6 +98,7 @@ class EEGDenoiseNetDataset(Dataset):
             raise ValueError("EEG_all_epochs.npy must have shape [num_epochs, length].")
 
         self.artifacts = {}
+        self.matched_clean = {}
         for noise_type in self.noise_types:
             if noise_type not in {"eog", "emg"}:
                 raise ValueError("noise_types entries must be 'eog' or 'emg'.")
@@ -84,23 +108,29 @@ class EEGDenoiseNetDataset(Dataset):
                 raise ValueError(f"{filename} must have shape [num_epochs, length].")
             if artifact.shape[1] != self.clean.shape[1]:
                 raise ValueError(f"{filename} length {artifact.shape[1]} does not match EEG length {self.clean.shape[1]}.")
-            self.artifacts[noise_type] = artifact
+            self.artifacts[noise_type] = _permute_rows(artifact, self.seed + 100 + len(self.artifacts))
 
-        # 8:1:1 split over each source before mixing.
-        self.clean_indices = _split_indices(len(self.clean), split, self.seed)
+            clean_perm = _permute_rows(self.clean, self.seed)
+            self.matched_clean[noise_type] = _balance_clean_to_noise(clean_perm, len(self.artifacts[noise_type]))
+
+        self.clean_indices = {
+            noise_type: _split_indices(len(clean_matched), split, self.seed + 10 + i)
+            for i, (noise_type, clean_matched) in enumerate(self.matched_clean.items())
+        }
         self.artifact_indices = {
             noise_type: _split_indices(len(artifact), split, self.seed + 100 + i)
             for i, (noise_type, artifact) in enumerate(self.artifacts.items())
         }
 
         if split == "train":
-            self.length = len(self.clean_indices) * max(1, self.combin_num)
+            train_base = sum(len(self.clean_indices[noise_type]) for noise_type in self.noise_types)
+            self.length = max(1, train_base * max(1, self.combin_num))
         else:
             self.eval_plan = [
-                (clean_idx, noise_type, snr_db)
+                (noise_type, clean_idx, artifact_idx, snr_db)
                 for noise_type in self.noise_types
                 for snr_db in self.eval_snr_levels
-                for clean_idx in self.clean_indices
+                for clean_idx, artifact_idx in zip(self.clean_indices[noise_type], self.artifact_indices[noise_type])
             ]
             self.length = len(self.eval_plan)
 
@@ -114,38 +144,31 @@ class EEGDenoiseNetDataset(Dataset):
         scale = _rms(clean) / (artifact_rms * snr_linear)
         return clean + artifact * scale
 
-    def _normalize_pair(self, noisy: np.ndarray, clean: np.ndarray):
-        if not self.normalize:
-            return noisy, clean
-        std = float(np.std(noisy))
-        if std < 1e-8:
-            std = 1.0
-        return noisy / std, clean / std
-
     def _sample_train(self, idx: int):
-        clean_idx = self.clean_indices[idx % len(self.clean_indices)]
         noise_type = self.noise_types[idx % len(self.noise_types)]
+        clean_pool = self.clean_indices[noise_type]
         artifact_pool = self.artifact_indices[noise_type]
+        clean_idx = clean_pool[self._rng.integers(0, len(clean_pool))]
         artifact_idx = artifact_pool[self._rng.integers(0, len(artifact_pool))]
         snr_db = self._rng.uniform(*self.train_snr_range)
-        return clean_idx, noise_type, artifact_idx, snr_db
+        return noise_type, clean_idx, artifact_idx, snr_db
 
     def _sample_eval(self, idx: int):
-        clean_idx, noise_type, snr_db = self.eval_plan[idx]
-        artifact_pool = self.artifact_indices[noise_type]
-        artifact_idx = artifact_pool[idx % len(artifact_pool)]
-        return clean_idx, noise_type, artifact_idx, snr_db
+        noise_type, clean_idx, artifact_idx, snr_db = self.eval_plan[idx]
+        return noise_type, clean_idx, artifact_idx, snr_db
 
     def __getitem__(self, idx):
         if self.split == "train":
-            clean_idx, noise_type, artifact_idx, snr_db = self._sample_train(idx)
+            noise_type, clean_idx, artifact_idx, snr_db = self._sample_train(idx)
         else:
-            clean_idx, noise_type, artifact_idx, snr_db = self._sample_eval(idx)
+            noise_type, clean_idx, artifact_idx, snr_db = self._sample_eval(idx)
 
-        clean = np.asarray(self.clean[clean_idx], dtype=np.float32)
+        clean = np.asarray(self.matched_clean[noise_type][clean_idx], dtype=np.float32)
         artifact = np.asarray(self.artifacts[noise_type][artifact_idx], dtype=np.float32)
+        if self.normalize:
+            clean = _standardize(clean)
+            artifact = _standardize(artifact)
         noisy = self._mix(clean, artifact, snr_db).astype(np.float32)
-        noisy, clean = self._normalize_pair(noisy, clean)
 
         noisy = torch.from_numpy(noisy.astype(np.float32)).unsqueeze(0)
         clean = torch.from_numpy(clean.astype(np.float32)).unsqueeze(0)

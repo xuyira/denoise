@@ -43,7 +43,7 @@ def get_args_parser():
     parser.add_argument("--train_snr_min", type=float, default=None)
     parser.add_argument("--train_snr_max", type=float, default=None)
     parser.add_argument("--eval_snr_levels", nargs="+", type=float, default=None)
-    parser.add_argument("--combin_num", type=int, default=10)
+    parser.add_argument("--combin_num", type=int, default=11)
     parser.add_argument("--target_length", type=int, default=512)
     parser.add_argument("--batch_size", type=int, default=40)
     parser.add_argument("--epochs", type=int, default=50)

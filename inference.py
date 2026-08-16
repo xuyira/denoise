@@ -45,7 +45,7 @@ def get_args_parser():
     parser.add_argument("--train_snr_min", type=float, default=None)
     parser.add_argument("--train_snr_max", type=float, default=None)
     parser.add_argument("--eval_snr_levels", nargs="+", type=float, default=None)
-    parser.add_argument("--combin_num", type=int, default=10)
+    parser.add_argument("--combin_num", type=int, default=11)
 
     parser.add_argument("--ema_decay1", type=float, default=0.9999)
     parser.add_argument("--ema_decay2", type=float, default=0.9996)
