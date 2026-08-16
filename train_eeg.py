@@ -34,6 +34,8 @@ def get_args_parser():
                         help="Add an EEGDfus-style Conv1D residual refiner after clean prediction.")
     parser.add_argument("--conv_refiner_channels", type=int, default=64)
     parser.add_argument("--conv_refiner_kernel", type=int, default=3)
+    parser.add_argument("--condition_mode", default="none", choices=["none", "refiner"],
+                        help="Use noisy EEG as a fixed condition for the Conv1D refiner.")
 
     # dataset
     parser.add_argument("--dataset", default="eegdenoisenet", choices=["eegdenoisenet"])

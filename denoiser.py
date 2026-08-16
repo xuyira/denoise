@@ -16,11 +16,13 @@ class EEGDfusConv1d(nn.Conv1d):
 class Conv1DRefiner(nn.Module):
     """Local residual correction head inspired by EEGDfus' Conv1D blocks."""
 
-    def __init__(self, channels: int, hidden_channels: int = 64, kernel_size: int = 3):
+    def __init__(self, channels: int, hidden_channels: int = 64, kernel_size: int = 3, use_condition: bool = False):
         super().__init__()
+        self.use_condition = use_condition
+        input_channels = channels * (3 if use_condition else 2)
         padding = kernel_size // 2
         self.net = nn.Sequential(
-            EEGDfusConv1d(channels * 2, hidden_channels, kernel_size, padding=padding),
+            EEGDfusConv1d(input_channels, hidden_channels, kernel_size, padding=padding),
             nn.GELU(),
             EEGDfusConv1d(hidden_channels, hidden_channels, kernel_size, padding=padding),
             nn.GELU(),
@@ -30,8 +32,13 @@ class Conv1DRefiner(nn.Module):
         if self.net[-1].bias is not None:
             nn.init.zeros_(self.net[-1].bias)
 
-    def forward(self, current: torch.Tensor, clean_pred: torch.Tensor) -> torch.Tensor:
-        return clean_pred + self.net(torch.cat([current, clean_pred], dim=1))
+    def forward(self, current: torch.Tensor, clean_pred: torch.Tensor, condition: torch.Tensor = None) -> torch.Tensor:
+        inputs = [current, clean_pred]
+        if self.use_condition:
+            if condition is None:
+                raise ValueError("Conv1DRefiner was configured with condition input but received condition=None.")
+            inputs.append(condition)
+        return clean_pred + self.net(torch.cat(inputs, dim=1))
 
 
 class Denoiser(nn.Module):
@@ -63,6 +70,7 @@ class Denoiser(nn.Module):
         self.denoise_mode = getattr(args, "denoise_mode", "ode")
         self.t_eps = getattr(args, "t_eps", 1e-5)
         self.use_conv_refiner = getattr(args, "conv_refiner", False)
+        self.condition_mode = getattr(args, "condition_mode", "none")
         self.conv_refiner = None
         if self.prediction_target not in {"velocity", "clean"}:
             raise ValueError("prediction_target must be 'velocity' or 'clean'.")
@@ -70,6 +78,8 @@ class Denoiser(nn.Module):
             raise ValueError("clean_output must be 'direct' or 'residual'.")
         if self.denoise_mode not in {"ode", "direct"}:
             raise ValueError("denoise_mode must be 'ode' or 'direct'.")
+        if self.condition_mode not in {"none", "refiner"}:
+            raise ValueError("condition_mode must be 'none' or 'refiner'.")
         if self.use_conv_refiner:
             if self.prediction_target != "clean":
                 raise ValueError("conv_refiner currently supports prediction_target='clean' only.")
@@ -77,7 +87,10 @@ class Denoiser(nn.Module):
                 channels=args.num_eeg_channels,
                 hidden_channels=getattr(args, "conv_refiner_channels", 64),
                 kernel_size=getattr(args, "conv_refiner_kernel", 3),
+                use_condition=self.condition_mode == "refiner",
             )
+        elif self.condition_mode != "none":
+            raise ValueError("condition_mode='refiner' requires --conv_refiner.")
 
         self.ema_decay1 = args.ema_decay1
         self.ema_decay2 = args.ema_decay2
@@ -140,7 +153,7 @@ class Denoiser(nn.Module):
         v = clean - noisy
 
         if self.prediction_target == "clean":
-            clean_pred = self._clean_pred_from_net(z, t.flatten())
+            clean_pred = self._clean_pred_from_net(z, t.flatten(), noisy_condition=noisy)
             v_pred = (clean_pred - z) / (1 - t).clamp_min(self.t_eps)
         else:
             net_out = self.net(z, t.flatten())
@@ -149,17 +162,18 @@ class Denoiser(nn.Module):
 
         return self._compute_loss(v, v_pred, clean, clean_pred)
 
-    def _clean_pred_from_net(self, z: torch.Tensor, t: torch.Tensor) -> torch.Tensor:
+    def _clean_pred_from_net(self, z: torch.Tensor, t: torch.Tensor, noisy_condition: torch.Tensor = None) -> torch.Tensor:
         net_out = self.net(z, t)
         clean_pred = z + net_out if self.clean_output == "residual" else net_out
-        return self._refine_clean(z, clean_pred)
+        return self._refine_clean(z, clean_pred, noisy_condition=noisy_condition)
 
-    def _refine_clean(self, current: torch.Tensor, clean_pred: torch.Tensor) -> torch.Tensor:
+    def _refine_clean(self, current: torch.Tensor, clean_pred: torch.Tensor, noisy_condition: torch.Tensor = None) -> torch.Tensor:
         if self.conv_refiner is None:
             return clean_pred
         current_signal = self._patches_to_signal(current)
         pred_signal = self._patches_to_signal(clean_pred)
-        refined_signal = self.conv_refiner(current_signal, pred_signal)
+        condition_signal = self._patches_to_signal(noisy_condition) if self.condition_mode == "refiner" else None
+        refined_signal = self.conv_refiner(current_signal, pred_signal, condition_signal)
         return self._signal_to_patches(refined_signal)
 
     def _compute_loss(self, v, v_pred, x, x_pred):
@@ -311,9 +325,9 @@ class Denoiser(nn.Module):
         return out
 
     @torch.no_grad()
-    def _run_clean_pred(self, z, t, use_ema=True):
+    def _run_clean_pred(self, z, t, use_ema=True, noisy_condition=None):
         if use_ema is False or use_ema == "raw":
-            return self._clean_pred_from_net(z, t)
+            return self._clean_pred_from_net(z, t, noisy_condition=noisy_condition)
 
         backup = [p.detach().clone() for p in self.parameters()]
         if use_ema == "ema2":
@@ -323,7 +337,7 @@ class Denoiser(nn.Module):
         for p, p_ema in zip(self.parameters(), ema):
             p.data.copy_(p_ema)
 
-        out = self._clean_pred_from_net(z, t)
+        out = self._clean_pred_from_net(z, t, noisy_condition=noisy_condition)
 
         for p, old in zip(self.parameters(), backup):
             p.data.copy_(old)
@@ -332,12 +346,13 @@ class Denoiser(nn.Module):
     @torch.no_grad()
     def denoise(self, noisy, use_ema=True):
         z = self.to_training_space(noisy)
+        noisy_condition = z
         b = z.shape[0]
         device = z.device
 
         if self.prediction_target == "clean" and self.denoise_mode == "direct":
             t_vec = torch.zeros((b,), device=device)
-            return self._run_clean_pred(z, t_vec, use_ema=use_ema)
+            return self._run_clean_pred(z, t_vec, use_ema=use_ema, noisy_condition=noisy_condition)
 
         steps = self.steps
         use_heun = self.method == "heun"
@@ -346,7 +361,7 @@ class Denoiser(nn.Module):
         def _get_v(z_in, t_scalar):
             t_vec = torch.full((b,), t_scalar, device=device)
             if self.prediction_target == "clean":
-                clean_pred = self._run_clean_pred(z_in, t_vec, use_ema=use_ema)
+                clean_pred = self._run_clean_pred(z_in, t_vec, use_ema=use_ema, noisy_condition=noisy_condition)
                 denom = max(1.0 - t_scalar, self.t_eps)
                 return (clean_pred - z_in) / denom
             net_out = self._run_net(z_in, t_vec, use_ema=use_ema)

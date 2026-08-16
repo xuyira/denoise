@@ -44,6 +44,8 @@ def get_args_parser():
                         help="Add an EEGDfus-style Conv1D residual refiner after clean prediction.")
     parser.add_argument("--conv_refiner_channels", type=int, default=64)
     parser.add_argument("--conv_refiner_kernel", type=int, default=3)
+    parser.add_argument("--condition_mode", default="none", choices=["none", "refiner"],
+                        help="Use noisy EEG as a fixed condition for the Conv1D refiner.")
 
     parser.add_argument("--noise_types", nargs="+", default=["eog", "emg"], choices=["eog", "emg"])
     parser.add_argument("--train_snr_min", type=float, default=None)
@@ -142,6 +144,7 @@ def main(args):
         f"denoise_mode={args.denoise_mode}, "
         f"ema_mode={args.ema_mode}, "
         f"conv_refiner={args.conv_refiner}, "
+        f"condition_mode={args.condition_mode}, "
         f"sampling_method={args.sampling_method}, "
         f"num_sampling_steps={args.num_sampling_steps}"
     )
@@ -232,6 +235,7 @@ def main(args):
         "conv_refiner": args.conv_refiner,
         "conv_refiner_channels": args.conv_refiner_channels,
         "conv_refiner_kernel": args.conv_refiner_kernel,
+        "condition_mode": args.condition_mode,
         "loss_weight_velocity": args.loss_weight_velocity,
         "metrics": {name: summarize(values) for name, values in metrics.items()},
         "per_snr": summarize_grouped(per_snr),

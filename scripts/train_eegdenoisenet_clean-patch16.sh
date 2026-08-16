@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DATASETS_DIR="${1:-../EEGdenoiseNet/data}"
-OUTPUT_ROOT="${2:-./output/eegdenoisenet_clean_conv_patch16}"
+OUTPUT_ROOT="${2:-./output/eegdenoisenet_clean_conv_cond_patch16}"
 NOISE_TYPE="${3:-emg}"
 OUTPUT_DIR="${OUTPUT_ROOT}_${NOISE_TYPE}"
 
@@ -18,6 +18,7 @@ python train_eeg.py \
   --conv_refiner \
   --conv_refiner_channels 64 \
   --conv_refiner_kernel 3 \
+  --condition_mode refiner \
   --batch_size 128 \
   --epochs 200 \
   --blr 5e-5 \
