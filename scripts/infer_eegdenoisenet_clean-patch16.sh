@@ -2,32 +2,12 @@
 set -euo pipefail
 
 DATASETS_DIR="${1:-../EEGdenoiseNet/data}"
-CKPT="${2:-./output/eegdenoisenet_clean_patch16_none_emg}"
+CKPT="${2:-./output/eegdenoisenet_clean_patch16_emg}"
 OUTPUT_ROOT="${3:-./output/eegdenoisenet_clean_patch16_eval}"
 NOISE_TYPE="${4:-emg}"
 EMA_MODE="${5:-raw}"
 DENOISE_MODE="${6:-direct}"
-VARIANT="${7:-none}"
-OUTPUT_DIR="${OUTPUT_ROOT}_${VARIANT}_${NOISE_TYPE}_${EMA_MODE}_${DENOISE_MODE}"
-
-EXTRA_ARGS=()
-if [[ "$VARIANT" == "conv" ]]; then
-  EXTRA_ARGS=(
-    --conv_refiner
-    --conv_refiner_channels 64
-    --conv_refiner_kernel 3
-  )
-elif [[ "$VARIANT" == "cond" ]]; then
-  EXTRA_ARGS=(
-    --conv_refiner
-    --conv_refiner_channels 64
-    --conv_refiner_kernel 3
-    --condition_mode refiner
-  )
-elif [[ "$VARIANT" != "none" ]]; then
-  echo "VARIANT must be 'none', 'conv', or 'cond', got '$VARIANT'" >&2
-  exit 1
-fi
+OUTPUT_DIR="${OUTPUT_ROOT}_${NOISE_TYPE}_${EMA_MODE}_${DENOISE_MODE}"
 
 python inference.py \
   --dataset eegdenoisenet \
@@ -44,5 +24,4 @@ python inference.py \
   --gen_bsz 64 \
   --ema_mode "$EMA_MODE" \
   --num_sampling_steps 50 \
-  --sampling_method heun \
-  "${EXTRA_ARGS[@]}"
+  --sampling_method heun
