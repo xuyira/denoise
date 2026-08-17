@@ -7,6 +7,7 @@ OUTPUT_ROOT="${3:-./output/eegdenoisenet_clean_b_convffn_patch16_eval}"
 NOISE_TYPE="${4:-emg}"
 EMA_MODE="${5:-raw}"
 DENOISE_MODE="${6:-direct}"
+CONVFFN_KERNEL_SIZE="${7:-3}"
 OUTPUT_DIR="${OUTPUT_ROOT}_${NOISE_TYPE}_${EMA_MODE}_${DENOISE_MODE}"
 
 python inference.py \
@@ -20,7 +21,7 @@ python inference.py \
   --target_length 512 \
   --eeg_patch_size 16 \
   --use_convffn \
-  --convffn_kernel_size 3 \
+  --convffn_kernel_size "$CONVFFN_KERNEL_SIZE" \
   --prediction_target clean \
   --denoise_mode "$DENOISE_MODE" \
   --gen_bsz 64 \
